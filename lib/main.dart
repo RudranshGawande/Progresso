@@ -13,16 +13,16 @@ void main() async {
   } catch (e, stack) {
     developer.log('Error during initialization', error: e, stackTrace: stack);
   }
-  runApp(const ProAnalyticsApp());
+  runApp(const ProgressoApp());
 }
 
-class ProAnalyticsApp extends StatelessWidget {
-  const ProAnalyticsApp({super.key});
+class ProgressoApp extends StatelessWidget {
+  const ProgressoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ProAnalytics',
+      title: 'PROGRESSO',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

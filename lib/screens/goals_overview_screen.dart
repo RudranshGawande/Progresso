@@ -306,7 +306,7 @@ class _ActiveGoalsSection extends StatelessWidget {
             crossAxisCount: isMobile ? 1 : 2,
             mainAxisSpacing: 24,
             crossAxisSpacing: 24,
-            childAspectRatio: isMobile ? 1.1 : 1.2,
+            childAspectRatio: isMobile ? 1.0 : 1.1, // Adjusted for more vertical space
           ),
           itemCount: activeGoals.length + 1,
           itemBuilder: (context, index) {
@@ -380,7 +380,7 @@ class _GoalCard extends StatelessWidget {
               children: [
                 Image.network(
                   imageUrl,
-                  height: 120,
+                  height: 100, // Reduced from 120
                   width: double.infinity,
                   fit: BoxFit.cover,
                 ),
@@ -400,14 +400,14 @@ class _GoalCard extends StatelessWidget {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16), // Reduced from 20
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate900)),
                   const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
-                  const SizedBox(height: 16),
+                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, color: AppColors.slate500)),
+                  const SizedBox(height: 12), // Reduced from 16
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -425,7 +425,7 @@ class _GoalCard extends StatelessWidget {
                       valueColor: const AlwaysStoppedAnimation(AppColors.primary),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12), // Reduced from 16
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -466,7 +466,6 @@ class _AddNewObjectiveCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        constraints: const BoxConstraints(minHeight: 220),
         decoration: BoxDecoration(
           color: AppColors.primary.withOpacity(0.05),
           borderRadius: BorderRadius.circular(12),
