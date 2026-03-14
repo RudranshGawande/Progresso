@@ -8,6 +8,7 @@ import 'package:progresso/screens/goal_detail_screen.dart';
 import 'package:progresso/screens/goals_overview_screen.dart';
 import 'package:progresso/screens/goal_archive_screen.dart';
 import 'package:progresso/screens/focus_summary_screen.dart';
+import 'package:progresso/screens/analysis_screen.dart';
 import 'package:progresso/services/goal_service.dart';
 
 class MainShell extends StatefulWidget {
@@ -91,6 +92,8 @@ class _MainShellState extends State<MainShell> {
             onSessionTap: (goal, task, session) => _openSessionSummary(goal, task, session),
             onViewAllGoals: () => _onNavChange('Goals'),
           );
+        } else if (_activeTab == 'Analysis') {
+          content = const AnalysisScreen();
         } else if (_activeTab == 'Goals') {
           if (_showingArchive && _selectedGoal != null) {
             content = GoalArchiveScreen(

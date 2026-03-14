@@ -33,6 +33,8 @@ class AppColors {
 
   static const Color emerald50 = Color(0xFFECFDF5);
   static const Color emerald100 = Color(0xFFD1FAE5);
+  static const Color emerald200 = Color(0xFFA7F3D0);
+  static const Color emerald300 = Color(0xFF6EE7B7);
   static const Color emerald500 = Color(0xFF10B981);
   static const Color emerald600 = Color(0xFF059669);
 
