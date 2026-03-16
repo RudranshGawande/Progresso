@@ -4,6 +4,8 @@ import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/widgets/focus_session_dialog.dart';
+import '../services/workspace_service.dart';
+import '../models/workspace_models.dart';
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({super.key});
@@ -33,26 +35,37 @@ class DashboardHeader extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Dashboard Overview',
-                  style: TextStyle(
-                    fontSize: isMobile ? 18 : 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.slate900,
-                  ),
-                ),
-                if (!isMobile) ...[
-                  const SizedBox(height: 2),
-                  const Text(
-                    "Welcome back, here's what's happening today.",
-                    style: TextStyle(fontSize: 14, color: AppColors.slate500),
-                  ),
-                ],
-              ],
+            child: ListenableBuilder(
+              listenable: WorkspaceService(),
+              builder: (context, _) {
+                final service = WorkspaceService();
+                final title = service.activeType == WorkspaceType.personal 
+                    ? 'Performance Insights' 
+                    : '${service.activeCommunity?.name ?? "Community"} Dashboard';
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: isMobile ? 18 : 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.slate900,
+                      ),
+                    ),
+                    if (!isMobile) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        service.activeType == WorkspaceType.personal
+                            ? 'Daily productivity overview and 24h metrics analysis.'
+                            : 'Team productivity metrics and collaborative goal progress.',
+                        style: const TextStyle(fontSize: 14, color: AppColors.slate500),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
           if (!isMobile) ...[

@@ -12,6 +12,9 @@ import 'package:progresso/models/goal_models.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/widgets/cta_banner.dart';
+import '../services/workspace_service.dart';
+import '../screens/community_dashboard.dart';
+import '../models/workspace_models.dart';
 
 class DashboardScreen extends StatelessWidget {
   final Function(Goal)? onGoalTap;
@@ -28,21 +31,29 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: WorkspaceService(),
       builder: (context, _) {
-        final goals = GoalService().goals;
-        return Column(
-          children: [
-            const DashboardHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: EdgeInsets.all(Responsive.isMobile(context) ? 16 : 32),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // ── Stat cards ──────────────────────────────────
-                      _buildStatCards(context, goals),
+        final workspaceService = WorkspaceService();
+        final bool isCommunity = workspaceService.activeType == WorkspaceType.community;
+
+        return ListenableBuilder(
+          listenable: GoalService(),
+          builder: (context, _) {
+            final goals = GoalService().goals;
+            return Column(
+              children: [
+                const DashboardHeader(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: EdgeInsets.all(Responsive.isMobile(context) ? 16 : 32),
+                      child: isCommunity 
+                        ? CommunityDashboard(community: workspaceService.activeCommunity!)
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // ── Stat cards ──────────────────────────────────
+                              _buildStatCards(context, goals),
 
                       const SizedBox(height: 32),
 
@@ -80,13 +91,15 @@ class DashboardScreen extends StatelessWidget {
                         },
                       ),
 
-                      const SizedBox(height: 32),
-                    ],
+                              const SizedBox(height: 32),
+                            ],
+                          ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -113,6 +126,9 @@ class DashboardScreen extends StatelessWidget {
     int sessionCount = 0;
     int sessionCountThisWeek = 0;
     int sessionCountLastWeek = 0;
+    int sessionCountToday = 0;
+    int tasksCompletedToday = 0;
+    num focusScoreToday = 0;
     
     int maxStreak = 0;
     double dailyGoalCurrent = 0.0;
@@ -124,6 +140,13 @@ class DashboardScreen extends StatelessWidget {
       maxStreak = maxStreak > goal.currentStreak ? maxStreak : goal.currentStreak;
       
       for (var task in goal.tasks) {
+        if (task.isCompleted && task.completedAt != null) {
+          final completedDate = DateTime(task.completedAt!.year, task.completedAt!.month, task.completedAt!.day);
+          if (completedDate == today) {
+            tasksCompletedToday++;
+          }
+        }
+
         for (final FocusSession session in task.sessions) {
           totalFocusScore += session.focusScore;
           sessionCount++;
@@ -133,6 +156,8 @@ class DashboardScreen extends StatelessWidget {
 
           if (sessionDate == today) {
              dailyGoalCurrent += hours;
+             sessionCountToday++;
+             focusScoreToday += session.focusScore;
           }
 
           if (sessionDate.isAfter(startOfThisWeek.subtract(const Duration(days: 1))) && sessionDate.isBefore(today.add(const Duration(days: 1)))) {
@@ -148,7 +173,9 @@ class DashboardScreen extends StatelessWidget {
       }
     }
 
-    double avgFocusScore = sessionCount > 0 ? totalFocusScore / sessionCount : 0;
+    double avgFocusScore = sessionCountToday > 0 
+        ? focusScoreToday / sessionCountToday 
+        : (sessionCount > 0 ? totalFocusScore / sessionCount : 0);
     double avgFocusThisWeek = sessionCountThisWeek > 0 ? focusScoreThisWeek / sessionCountThisWeek : 0;
     double avgFocusLastWeek = sessionCountLastWeek > 0 ? focusScoreLastWeek / sessionCountLastWeek : 0;
     
@@ -165,10 +192,11 @@ class DashboardScreen extends StatelessWidget {
     final focusTrendIcon = focusTrend >= 0 || (focusTrend == 0 && avgFocusThisWeek == 0) ? Icons.trending_up : Icons.trending_down;
 
     double dailyGoalProgress = dailyGoalTarget > 0 ? (dailyGoalCurrent / dailyGoalTarget).clamp(0.0, 1.0) : 0.0;
+    final avgSessionLengthMinutesToday = sessionCountToday > 0 ? (dailyGoalCurrent * 60) / sessionCountToday : 0.0;
 
     String formatValue(double val) {
       if (val == val.floorToDouble()) return val.toInt().toString();
-      return val.toStringAsFixed(2).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
+      return val.toStringAsFixed(1).replaceAll(RegExp(r'0*$'), '').replaceAll(RegExp(r'\.$'), '');
     }
 
     final cards = [
@@ -179,41 +207,41 @@ class DashboardScreen extends StatelessWidget {
         trend: hoursTrendText,
         trendColor: hoursTrendColor,
         trendIcon: hoursTrendIcon,
-        metric: 'Total Hours Worked',
-        value: '${formatValue(totalHours)}h',
+        metric: 'Total Hours (Today)',
+        value: '${formatValue(dailyGoalCurrent)}h',
       ),
       StatCard(
         icon: Icons.track_changes,
-        iconColor: AppColors.blue500,
-        iconBgColor: AppColors.blue500.withOpacity(0.1),
+        iconColor: Colors.orange,
+        iconBgColor: Colors.orange.withOpacity(0.1),
         trend: focusTrendText,
         trendColor: focusTrendColor,
         trendIcon: focusTrendIcon,
-        metric: 'Focus Score',
-        value: '${avgFocusScore.toInt()}%',
+        metric: 'Focus Score (Today)',
+        value: '${avgFocusScore.toInt()}/100',
       ),
       StatCard(
-        icon: Icons.radio_button_checked,
-        iconColor: AppColors.primary,
-        iconBgColor: AppColors.primary.withOpacity(0.1),
-        trend: 'Today',
-        trendColor: AppColors.slate500,
-        metric: 'Daily Goal',
-        value: '${formatValue(dailyGoalCurrent)}h',
-        targetLabel: '/ ${dailyGoalTarget.toInt()}h target',
-        progress: dailyGoalProgress,
+        icon: Icons.timer,
+        iconColor: AppColors.blue500,
+        iconBgColor: AppColors.blue500.withOpacity(0.1),
+        trend: '+8%',
+        trendColor: AppColors.emerald500,
+        trendIcon: Icons.trending_up,
+        metric: 'Avg Session Length',
+        value: '${avgSessionLengthMinutesToday.round()} min',
       ),
       StatCard(
-        icon: Icons.local_fire_department,
-        iconColor: AppColors.rose500,
-        iconBgColor: AppColors.rose500.withOpacity(0.1),
-        trend: maxStreak == 0 ? 'Start' : (maxStreak < 3 ? '-1' : '+1'),
-        trendColor: AppColors.rose500,
-        trendIcon: maxStreak < 3 ? Icons.trending_down : Icons.trending_up,
-        metric: 'Current Streak',
-        value: '$maxStreak Days',
+        icon: Icons.done_all,
+        iconColor: Colors.purple,
+        iconBgColor: Colors.purple.withOpacity(0.1),
+        trend: '+12%',
+        trendColor: AppColors.emerald500,
+        trendIcon: Icons.trending_up,
+        metric: 'Tasks Completed',
+        value: '$tasksCompletedToday',
       ),
     ];
+
 
     if (isMobile) {
       return Column(

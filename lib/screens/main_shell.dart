@@ -10,6 +10,12 @@ import 'package:progresso/screens/goal_archive_screen.dart';
 import 'package:progresso/screens/focus_summary_screen.dart';
 import 'package:progresso/screens/analysis_screen.dart';
 import 'package:progresso/services/goal_service.dart';
+import 'package:progresso/models/workspace_models.dart';
+import 'package:progresso/services/workspace_service.dart';
+import 'package:progresso/screens/sessions_overview_screen.dart';
+import 'package:progresso/screens/session_detail_screen.dart';
+
+
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -69,9 +75,12 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: Listenable.merge([GoalService(), WorkspaceService()]),
       builder: (context, _) {
         final goals = GoalService().goals;
+        final wsService = WorkspaceService();
+        final activeWS = wsService.activeType;
+        final community = wsService.activeCommunity;
         
         // Ensure _selectedGoal is still valid after a deletion or update
         if (_selectedGoal != null) {
@@ -116,6 +125,27 @@ class _MainShellState extends State<MainShell> {
               onGoalTap: (goal) => _openGoalDetail(goal),
             );
           }
+        } else if (_activeTab == 'Sessions') {
+          if (activeWS == WorkspaceType.community && community != null) {
+            content = SessionsOverviewScreen(
+              community: community,
+              onSessionTap: (session) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SessionDetailScreen(
+                      session: session,
+                      isAdmin: true,
+                    ),
+                  ),
+                );
+              },
+            );
+          } else {
+            content = const Center(child: Text('Personal Sessions History coming soon'));
+          }
+        } else if (_activeTab == 'Tasks') {
+          content = const Center(child: Text('Tasks Overview coming soon'));
         } else {
           content = const DashboardScreen();
         }

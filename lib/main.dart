@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:progresso/screens/main_shell.dart';
+import 'package:progresso/screens/auth_screen.dart';
 import 'package:progresso/services/session_manager.dart';
 import 'package:progresso/services/goal_service.dart';
+import 'package:progresso/services/workspace_service.dart';
 import 'dart:developer' as developer;
 
 void main() async {
@@ -10,6 +12,7 @@ void main() async {
   try {
     await SessionManager().init();
     await GoalService().init();
+    await WorkspaceService().init();
   } catch (e, stack) {
     developer.log('Error during initialization', error: e, stackTrace: stack);
   }
@@ -29,7 +32,9 @@ class ProgressoApp extends StatelessWidget {
         textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
         scaffoldBackgroundColor: const Color(0xFFF6F6F8),
       ),
-      home: const MainShell(),
+
+      home: const AuthScreen(),
     );
   }
 }
+

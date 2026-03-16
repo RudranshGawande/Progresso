@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:progresso/theme/app_colors.dart';
+import 'package:progresso/widgets/workspace_switcher.dart';
+
 
 
 class SidebarWidget extends StatelessWidget {
@@ -29,32 +31,8 @@ class SidebarWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Logo
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.bolt, color: AppColors.white, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'PROGRESSO',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.slate900,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            // Workspace Switcher
+            const WorkspaceSwitcher(),
             // Navigation
             Expanded(
               child: Padding(
@@ -80,6 +58,20 @@ class SidebarWidget extends StatelessWidget {
                       label: 'Goals',
                       isActive: activeItem == 'Goals',
                       onTap: () => onItemTap?.call('Goals'),
+                    ),
+                    const SizedBox(height: 4),
+                    _NavItem(
+                      icon: Icons.layers,
+                      label: 'Sessions',
+                      isActive: activeItem == 'Sessions',
+                      onTap: () => onItemTap?.call('Sessions'),
+                    ),
+                    const SizedBox(height: 4),
+                    _NavItem(
+                      icon: Icons.check_circle_outline,
+                      label: 'Tasks',
+                      isActive: activeItem == 'Tasks',
+                      onTap: () => onItemTap?.call('Tasks'),
                     ),
                   ],
                 ),
