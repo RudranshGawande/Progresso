@@ -486,49 +486,62 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final tasksTrend = _calculateStaticTrend(current.completedTasksCount, prev.completedTasksCount);
     final isTasksPositive = current.completedTasksCount >= prev.completedTasksCount;
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: isMobile ? 1 : 4,
-      crossAxisSpacing: 24,
-      mainAxisSpacing: 24,
-      childAspectRatio: isMobile ? 2.8 : 1.6,
-      children: [
-        _buildStatCard(
-          icon: Icons.schedule,
-          iconColor: AppColors.primary,
-          label: 'Total Hours$periodLabel',
-          value: '${current.totalHours.toStringAsFixed(1)}h',
-          trend: hoursTrend,
-          isPositive: isHoursPositive,
+    final cards = [
+      _buildStatCard(
+        icon: Icons.schedule,
+        iconColor: AppColors.primary,
+        label: 'Total Hours$periodLabel',
+        value: '${current.totalHours.toStringAsFixed(1)}h',
+        trend: hoursTrend,
+        isPositive: isHoursPositive,
+      ),
+      _buildStatCard(
+        icon: Icons.track_changes,
+        iconColor: Colors.orange,
+        label: 'Focus Score$periodLabel',
+        value: '${current.avgFocusScore.toInt()}/100',
+        trend: focusTrend,
+        isPositive: isFocusPositive,
+      ),
+      _buildStatCard(
+        icon: Icons.timer,
+        iconColor: AppColors.blue500,
+        label: 'Avg Session Length$periodLabel',
+        value: current.avgSessionMinutes >= 60 
+                ? '${(current.avgSessionMinutes / 60).floor()}h ${(current.avgSessionMinutes % 60).round()}m' 
+                : '${current.avgSessionMinutes.toInt()} min',
+        trend: sessionTrend,
+        isPositive: isSessionPositive,
+      ),
+      _buildStatCard(
+        icon: Icons.done_all,
+        iconColor: Colors.purple,
+        label: 'Tasks Completed$periodLabel',
+        value: '${current.completedTasksCount}',
+        trend: tasksTrend,
+        isPositive: isTasksPositive,
+      ),
+    ];
+
+    if (isMobile) {
+      return Column(
+        children: cards.map((c) => Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: c,
+        )).toList(),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: cards.map((c) => Expanded(
+        child: Padding(
+          padding: EdgeInsets.only(
+            right: cards.indexOf(c) < cards.length - 1 ? 24 : 0,
+          ),
+          child: c,
         ),
-        _buildStatCard(
-          icon: Icons.track_changes,
-          iconColor: Colors.orange,
-          label: 'Focus Score$periodLabel',
-          value: '${current.avgFocusScore.toInt()}/100',
-          trend: focusTrend,
-          isPositive: isFocusPositive,
-        ),
-        _buildStatCard(
-          icon: Icons.timer,
-          iconColor: AppColors.blue500,
-          label: 'Avg Session Length$periodLabel',
-          value: current.avgSessionMinutes >= 60 
-                  ? '${(current.avgSessionMinutes / 60).floor()}h ${(current.avgSessionMinutes % 60).round()}m' 
-                  : '${current.avgSessionMinutes.toInt()} min',
-          trend: sessionTrend,
-          isPositive: isSessionPositive,
-        ),
-        _buildStatCard(
-          icon: Icons.done_all,
-          iconColor: Colors.purple,
-          label: 'Tasks Completed$periodLabel',
-          value: '${current.completedTasksCount}',
-          trend: tasksTrend,
-          isPositive: isTasksPositive,
-        ),
-      ],
+      )).toList(),
     );
   }
 
@@ -557,6 +570,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -570,38 +584,45 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 ),
                 child: Icon(icon, color: iconColor, size: 24),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isPositive ? AppColors.emerald50 : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isPositive ? Icons.trending_up : Icons.trending_down,
-                      color: isPositive ? AppColors.emerald500 : Colors.red.shade500,
-                      size: 14,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      trend,
-                      style: GoogleFonts.inter(
+              Flexible(
+                child: Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isPositive ? AppColors.emerald50 : Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isPositive ? Icons.trending_up : Icons.trending_down,
                         color: isPositive ? AppColors.emerald500 : Colors.red.shade500,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        size: 14,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          trend,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            color: isPositive ? AppColors.emerald500 : Colors.red.shade500,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-
             ],
           ),
           const SizedBox(height: 12),
           Text(
             label,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
             style: const TextStyle(
               color: AppColors.slate500,
               fontSize: 13,
@@ -609,17 +630,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ),
           ),
           const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: GoogleFonts.inter(
-                fontSize: 26,
-                fontWeight: FontWeight.w800,
-                color: AppColors.slate900,
-                letterSpacing: -0.5,
-              ),
+          Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: AppColors.slate900,
+              letterSpacing: -0.5,
             ),
           ),
         ],
