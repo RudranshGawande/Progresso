@@ -10,6 +10,7 @@ import 'dart:developer' as developer;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
+    
     await SessionManager().init();
     await GoalService().init();
     await WorkspaceService().init();
