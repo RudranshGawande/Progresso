@@ -51,13 +51,13 @@ class _CreateGoalDialogState extends State<CreateGoalDialog> {
   String _getImageForTitle(String title) {
     final t = title.toLowerCase();
     if (t.contains('exam') || t.contains('study')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuD9QJ_LVBXza2ziIOuTjHIhBsAb0-GKCtjEvzPsPCTdttR7xoxn5p2PxUXPG5Hcwkd3pSU6-l95dIwsV-nFWQ_Zn21LOu0jiFdCnUIZN4xvAI1jg4KTCOFB8wqCcBomckeuE-tRCPnH6f7rYRU_58NUkKXCgpLrujuyLqBGDt82O3aAZ4tzK-zOA2sJa7fjC-TAGD61Muj4h_gRt7H1sUrBkc_O4_y-rqOZcpZVZt5W998QnletUnN8jXPHM6LrkcVrOlw3FvJYnuwa';
+      return 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=400&auto=format&fit=crop';
     }
     if (t.contains('design') || t.contains('skill')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuBarbCp4lSeTjvuTeJKaPDSyR1nHueV9Kf5VCLz2G2QVTSiXw4FgDFOcyqDO2H9efLiYTUy8dhPfV1bbP3NkPXHqqmLqOK6SB29KFn5t1T44JVdHPnw-Xa2UTSOFROCZqO9rk79YV0PtUmzQHGp8iPyJVXUy9wZImN6dI_siZr5RzIVmPlZoM7OoBPYeQkgriOu6UTd88IGDfAxpUNEx6Ly3_m0oinvHFB3fMLDmjgp7smgxemnfA8uj2C_OXLtZ-M2AOIZRCXzAxzG';
+      return 'https://images.unsplash.com/photo-1558655146-d09347e92766?q=80&w=400&auto=format&fit=crop';
     }
     if (t.contains('work') || t.contains('project')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuAWpMNj0Ezm1mYtevKRBBKG3uZ39JBbPjpdBKkgrCp0dBxriSct9kjWTm_6YQsDLFwv-j54mJjSsebkMjFD6o638PBfvVM_LWGiS1VB8NrSUhYpowon3F2LttbWpVbhoU86vZB1hDTUOp9-_1eHAGKtGxAs19P6MedZv3N9Zv4WKilG3IlwCZMKoQnVYzSvU4-aAdL6BXVb372ZL3YDAcMdZfjveUXUW2Dc8gb23Z3CIVNDA17lXOerJbr_xKSc5-2QknAwKih2CjsF';
+      return 'https://images.unsplash.com/photo-1454165833767-027ffea9e787?q=80&w=400&auto=format&fit=crop';
     }
     
     final fallbacks = [

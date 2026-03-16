@@ -380,9 +380,31 @@ class _GoalCard extends StatelessWidget {
               children: [
                 Image.network(
                   imageUrl,
-                  height: 100, // Reduced from 120
+                  height: 100,
                   width: double.infinity,
                   fit: BoxFit.cover,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    return Container(
+                      height: 100,
+                      color: AppColors.slate100,
+                      child: const Center(
+                        child: SizedBox(
+                          width: 24, height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      height: 100,
+                      color: AppColors.indigo50,
+                      child: Center(
+                        child: Icon(icon, color: AppColors.primary, size: 36),
+                      ),
+                    );
+                  },
                 ),
                 Positioned(
                   top: 12,

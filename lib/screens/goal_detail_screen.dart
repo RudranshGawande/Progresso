@@ -570,9 +570,12 @@ class _GoalTitleSection extends StatelessWidget {
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      Text(
-                        '${goal.description} â€¢ Due ${DateFormat('MMM dd').format(goal.dueDate)}',
-                        style: const TextStyle(color: AppColors.slate500, fontSize: 13),
+                      Flexible(
+                        child: Text(
+                          '${goal.description} \u2022 Due ${DateFormat('MMM dd').format(goal.dueDate)}',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: AppColors.slate500, fontSize: 13),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Container(
@@ -1332,8 +1335,9 @@ class _AddTaskForm extends StatelessWidget {
       children: [
         const Text('Task Name', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.slate500)),
         const SizedBox(height: 6),
-        TextField(
+        TextFormField(
           controller: controller,
+          autofocus: true,
           decoration: InputDecoration(
             hintText: 'e.g. Read Chapter 5',
             hintStyle: const TextStyle(fontSize: 14, color: AppColors.slate400),
@@ -1343,10 +1347,13 @@ class _AddTaskForm extends StatelessWidget {
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.slate300)),
           ),
+          textInputAction: TextInputAction.next,
+          keyboardType: TextInputType.text,
         ),
       ],
     );
   }
+
 
   Widget _buildPriorityField(BuildContext context) {
     String currentLabel;
