@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "279276903205",
+    "project_id": "progresso-00",
+    "storage_bucket": "progresso-00.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:279276903205:android:630a55b8d846834ccf18cc",
+        "android_client_info": {
+          "package_name": "com.application.progresso"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "279276903205-mojki4c5i7e1eeiovdjalvl6l4u2ss0o.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-A4C49OsuySIMyEGAitjdiL5tjACHRIQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "279276903205-mojki4c5i7e1eeiovdjalvl6l4u2ss0o.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
