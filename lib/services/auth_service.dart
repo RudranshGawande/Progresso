@@ -169,4 +169,33 @@ class AuthService {
       rethrow;
     }
   }
+
+  Future<void> updateProfile({String? name, String? email, String? bio, String? imageUrl}) async {
+    final user = _currentUser;
+    if (user == null) return;
+
+    final updatedUser = Map<String, dynamic>.from(user);
+    if (name != null) updatedUser['name'] = name;
+    if (email != null) updatedUser['email'] = email;
+    if (bio != null) updatedUser['bio'] = bio;
+    if (imageUrl != null) updatedUser['imageUrl'] = imageUrl;
+
+    try {
+      final db = MongoDBService().db;
+      if (db != null) {
+        final collection = db.collection(_collectionName);
+        await collection.update(
+          where.eq('email', user['email']),
+          modify.set('name', updatedUser['name'])
+               .set('email', updatedUser['email'])
+               .set('bio', updatedUser['bio'])
+               .set('imageUrl', updatedUser['imageUrl']),
+        );
+      }
+    } catch (e) {
+      developer.log('Error updating MongoDB profile: $e');
+    }
+
+    await _saveSession(updatedUser);
+  }
 }

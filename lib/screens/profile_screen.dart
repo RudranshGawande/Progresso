@@ -21,6 +21,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   
   bool _isEditing = false;
   String _selectedTheme = 'Light Mode';
+  String? _imageUrl;
 
   @override
   void initState() {
@@ -28,11 +29,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = AuthService().currentUser;
     _nameCtrl = TextEditingController(text: user?['name'] ?? 'Google User');
     _emailCtrl = TextEditingController(text: user?['email'] ?? 'Unknown');
-    _bioCtrl = TextEditingController(text: 'Product Designer based in San Francisco');
+    _bioCtrl = TextEditingController(text: user?['bio'] ?? 'Product Designer based in San Francisco');
+    _imageUrl = user?['imageUrl'];
     
     _selectedTheme = themeNotifier.themeMode == ThemeMode.dark ? 'Dark Mode' : 'Light Mode';
     
     _nameCtrl.addListener(() {
+      setState(() {});
+    });
+    _bioCtrl.addListener(() {
       setState(() {});
     });
   }
@@ -45,12 +50,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // Generates Gravatar based on email hash
+  // Generates Gravatar based on email hash or returns custom imageUrl
   String _getAvatarUrl(String email) {
+    if (_imageUrl != null && _imageUrl!.isNotEmpty) return _imageUrl!;
     if (email.isEmpty) return 'https://www.gravatar.com/avatar/?d=mp';
     final bytes = utf8.encode(email.toLowerCase().trim());
     final digest = md5.convert(bytes);
     return 'https://www.gravatar.com/avatar/$digest?d=mp&s=200';
+  }
+
+  void _showImageUpdateDialog() {
+    final TextEditingController urlCtrl = TextEditingController(text: _imageUrl);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Change Profile Image'),
+        content: TextField(
+          controller: urlCtrl,
+          decoration: const InputDecoration(
+            hintText: 'Enter image URL',
+            labelText: 'Image URL',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() => _imageUrl = urlCtrl.text.trim());
+              Navigator.pop(context);
+            },
+            child: const Text('Set Image'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildSidebarItem(IconData icon, String label, bool isActive) {
@@ -103,23 +139,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: AppColors.slate900,
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() => _isEditing = !_isEditing);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.slate700,
-                    surfaceTintColor: AppColors.slate700,
-                    side: const BorderSide(color: AppColors.slate300),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  child: Text(_isEditing ? 'Cancel Edit' : 'Edit Profile'),
-                ),
               ],
             ),
+
+            const SizedBox(height: 24),
+
+            // Profile Summary Card
+            _buildProfileSummaryCard(user, name, email),
 
             const SizedBox(height: 32),
 
@@ -226,7 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             children: [
                               _buildFormRow('Full Name', _nameCtrl),
                               const SizedBox(height: 24),
-                              _buildFormRow('Email Address', _emailCtrl, isReadOnly: true),
+                              _buildFormRow('Email Address', _emailCtrl),
                               const SizedBox(height: 24),
                               _buildFormRow('Biography', _bioCtrl, maxLines: 3),
                             ],
@@ -296,18 +322,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                                 const SizedBox(width: 12),
                                 ElevatedButton(
-                                  onPressed: () {
+                                  onPressed: () async {
                                     if (_selectedTheme == 'Dark Mode') {
                                       themeNotifier.setTheme(ThemeMode.dark);
                                     } else {
                                       themeNotifier.setTheme(ThemeMode.light);
                                     }
                                     
-                                    // Normally you would also update AuthService().currentUser name here and save to DB
-                                    setState(() => _isEditing = false);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Settings saved successfully'), backgroundColor: AppColors.indigo600),
+                                    await AuthService().updateProfile(
+                                      name: _nameCtrl.text.trim(),
+                                      email: _emailCtrl.text.trim(),
+                                      bio: _bioCtrl.text.trim(),
+                                      imageUrl: _imageUrl,
                                     );
+                                    
+                                    setState(() => _isEditing = false);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Settings saved successfully'), backgroundColor: AppColors.indigo600),
+                                      );
+                                    }
                                   },
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.indigo600,
@@ -328,6 +362,141 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileSummaryCard(Map<String, dynamic>? user, String name, String email) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.slate200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Avatar with Camera Icon
+          Stack(
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.indigo50, width: 4),
+                  image: DecorationImage(
+                    image: NetworkImage(_getAvatarUrl(email)),
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _isEditing ? _showImageUpdateDialog : null,
+                  child: MouseRegion(
+                    cursor: _isEditing ? SystemMouseCursors.click : SystemMouseCursors.basic,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.indigo600,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.indigo600.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 32),
+          // Info Section
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: GoogleFonts.inter(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.slate900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _bioCtrl.text,
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    color: AppColors.slate500,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    _buildBadge('Pro Plan', AppColors.indigo50, AppColors.indigo600),
+                    const SizedBox(width: 10),
+                    _buildBadge('Verified', AppColors.slate100, AppColors.slate600),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Edit Profile Button
+          ElevatedButton.icon(
+            onPressed: () {
+              setState(() => _isEditing = !_isEditing);
+            },
+            icon: Icon(_isEditing ? Icons.close : Icons.edit_rounded, size: 20, color: _isEditing ? AppColors.slate600 : Colors.white),
+            label: Text(_isEditing ? 'Cancel Edit' : 'Edit Profile'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isEditing ? AppColors.slate100 : AppColors.indigo600,
+              foregroundColor: _isEditing ? AppColors.slate700 : Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBadge(String text, Color bgColor, Color textColor) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: textColor,
+          letterSpacing: 0.3,
         ),
       ),
     );
