@@ -10,6 +10,12 @@ import 'package:progresso/screens/goal_archive_screen.dart';
 import 'package:progresso/screens/focus_summary_screen.dart';
 import 'package:progresso/screens/analysis_screen.dart';
 import 'package:progresso/services/goal_service.dart';
+import 'package:progresso/screens/profile_screen.dart';
+import 'package:progresso/models/workspace_models.dart';
+import 'package:progresso/services/workspace_service.dart';
+import 'package:progresso/screens/community_dashboard_screen.dart';
+import 'package:progresso/screens/community_analysis_screen.dart';
+import 'package:progresso/screens/community_goals_screen.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -69,7 +75,7 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: Listenable.merge([GoalService(), WorkspaceService()]),
       builder: (context, _) {
         final goals = GoalService().goals;
         
@@ -86,36 +92,57 @@ class _MainShellState extends State<MainShell> {
 
         Widget content;
         
+        final wsService = WorkspaceService();
+        final activeWS = wsService.activeType;
+        final community = wsService.activeCommunity;
+        
         if (_activeTab == 'Dashboard') {
-          content = DashboardScreen(
-            onGoalTap: (Goal goal) => _openGoalDetail(goal),
-            onSessionTap: (goal, task, session) => _openSessionSummary(goal, task, session),
-            onViewAllGoals: () => _onNavChange('Goals'),
-          );
-        } else if (_activeTab == 'Analysis') {
-          content = const AnalysisScreen();
-        } else if (_activeTab == 'Goals') {
-          if (_showingArchive && _selectedGoal != null) {
-            content = GoalArchiveScreen(
-              goal: _selectedGoal!,
-              onBack: () => setState(() => _showingArchive = false),
-              onBackToGoals: () => setState(() {
-                _showingArchive = false;
-                _showingGoalDetail = false;
-              }),
-            );
-          } else if (_showingGoalDetail && _selectedGoal != null) {
-            content = GoalDetailScreen(
-              goal: _selectedGoal!, 
-              allGoals: goals,
-              onViewArchive: () => setState(() => _showingArchive = true),
-              onBack: () => setState(() => _showingGoalDetail = false),
-            );
+          if (activeWS == WorkspaceType.community && community != null) {
+            content = CommunityDashboardScreen(community: community);
           } else {
-            content = GoalsOverviewScreen(
-              onGoalTap: (goal) => _openGoalDetail(goal),
+            content = DashboardScreen(
+              onGoalTap: (Goal goal) => _openGoalDetail(goal),
+              onSessionTap: (goal, task, session) => _openSessionSummary(goal, task, session),
+              onViewAllGoals: () => _onNavChange('Goals'),
             );
           }
+        } else if (_activeTab == 'Analysis') {
+          if (activeWS == WorkspaceType.community && community != null) {
+            content = CommunityAnalysisScreen(
+              community: community,
+              isAdmin: true, // Assuming current user is admin for now
+            );
+          } else {
+            content = const AnalysisScreen();
+          }
+        } else if (_activeTab == 'Goals') {
+          if (activeWS == WorkspaceType.community && community != null) {
+            content = CommunityGoalsScreen(community: community);
+          } else {
+            if (_showingArchive && _selectedGoal != null) {
+              content = GoalArchiveScreen(
+                goal: _selectedGoal!,
+                onBack: () => setState(() => _showingArchive = false),
+                onBackToGoals: () => setState(() {
+                  _showingArchive = false;
+                  _showingGoalDetail = false;
+                }),
+              );
+            } else if (_showingGoalDetail && _selectedGoal != null) {
+              content = GoalDetailScreen(
+                goal: _selectedGoal!, 
+                allGoals: goals,
+                onViewArchive: () => setState(() => _showingArchive = true),
+                onBack: () => setState(() => _showingGoalDetail = false),
+              );
+            } else {
+              content = GoalsOverviewScreen(
+                onGoalTap: (goal) => _openGoalDetail(goal),
+              );
+            }
+          }
+        } else if (_activeTab == 'Profile') {
+          content = const ProfileScreen();
         } else {
           content = const DashboardScreen();
         }

@@ -19,6 +19,13 @@ class GoalsOverviewScreen extends StatefulWidget {
 
 class _GoalsOverviewScreenState extends State<GoalsOverviewScreen> {
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +41,7 @@ class _GoalsOverviewScreenState extends State<GoalsOverviewScreen> {
         return Column(
           children: [
             _GoalsHeader(
+              searchController: _searchController,
               onNewGoal: () => showCreateGoalDialog(context),
               onSearchChanged: (val) => setState(() => _searchQuery = val),
             ),
@@ -131,10 +139,12 @@ class _GoalsOverviewScreenState extends State<GoalsOverviewScreen> {
 class _GoalsHeader extends StatelessWidget {
   final VoidCallback onNewGoal;
   final ValueChanged<String>? onSearchChanged;
+  final TextEditingController? searchController;
   
   const _GoalsHeader({
     required this.onNewGoal,
     this.onSearchChanged,
+    this.searchController,
   });
 
   @override
@@ -175,6 +185,7 @@ class _GoalsHeader extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: TextField(
+                    controller: searchController,
                     onChanged: onSearchChanged,
                     decoration: const InputDecoration(
                       hintText: 'Search goals...',

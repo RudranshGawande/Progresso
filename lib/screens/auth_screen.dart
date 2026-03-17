@@ -1,7 +1,14 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/screens/main_shell.dart';
+import 'package:progresso/services/auth_service.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:developer' as developer;
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -520,10 +527,21 @@ class _LoginFormState extends State<LoginForm> {
     });
     
     try {
-      // TODO: Implement MongoDB Atlas Auth
-      await Future.delayed(const Duration(seconds: 1));
+      final user = await AuthService().login(
+        _emailCtrl.text,
+        _passCtrl.text,
+      );
+      
       if (!mounted) return;
-      widget.onAuthSuccess();
+
+      if (user != null) {
+        widget.onAuthSuccess();
+      } else {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Invalid email or password';
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -533,18 +551,61 @@ class _LoginFormState extends State<LoginForm> {
     }
   }
 
-  void _googleSignIn() async {
+  Future<void> _handleGoogleAuth() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-    
+
     try {
-      // TODO: Implement MongoDB Atlas Google Sign-In
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return;
-      widget.onAuthSuccess();
+      String? name;
+      String? email;
+
+      // Force online sign-in to always display the account selector
+      final creds = await AuthService().googleSignIn.signInOnline();
+      
+      if (creds != null) {
+        final dynamic data = creds;
+        final String? idToken = data.idToken;
+        final String? accessToken = data.accessToken;
+        
+        if (idToken != null) {
+          Map<String, dynamic> decodedToken = JwtDecoder.decode(idToken);
+          email = decodedToken['email'];
+          name = decodedToken['name'] ?? 'Google User';
+        } else if (accessToken != null) {
+          // Fallback if idToken is omitted by the package
+          try {
+            final response = await http.get(
+              Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
+              headers: {'Authorization': 'Bearer $accessToken'},
+            );
+            if (response.statusCode == 200) {
+              final info = jsonDecode(response.body);
+              email = info['email'];
+              name = info['name'] ?? 'Google User';
+            } else {
+              developer.log('API error: ${response.body}');
+            }
+          } catch (apiError) {
+             developer.log('Exception while calling UserInfo API: $apiError');
+          }
+        } else {
+          developer.log('WARNING: idToken and accessToken are null. Cannot extract email.');
+        }
+      }
+
+      if (email != null) {
+        await AuthService().handleGoogleSignIn(name ?? 'User', email);
+        if (!mounted) return;
+        widget.onAuthSuccess();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
+      developer.log('Google Auth Error: $e');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -552,6 +613,8 @@ class _LoginFormState extends State<LoginForm> {
       });
     }
   }
+
+  void _googleSignIn() => _handleGoogleAuth();
 
   @override
   Widget build(BuildContext context) {
@@ -602,6 +665,7 @@ class _LoginFormState extends State<LoginForm> {
             hint: 'you@example.com',
             prefixIcon: Icons.mail_outline_rounded,
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
             validator: (v) {
               if (v == null || v.trim().isEmpty) return 'Email is required';
               if (!RegExp(r'\S+@\S+\.\S+').hasMatch(v.trim())) {
@@ -643,6 +707,8 @@ class _LoginFormState extends State<LoginForm> {
             hint: '••••••••',
             prefixIcon: Icons.lock_outline_rounded,
             obscureText: _obscurePass,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _submit(),
             suffixIcon: IconButton(
               icon: Icon(
                 _obscurePass
@@ -728,10 +794,24 @@ class _SignUpFormState extends State<SignUpForm> {
     });
 
     try {
-      // TODO: Implement MongoDB Atlas Registration
-      await Future.delayed(const Duration(seconds: 1));
+      await AuthService().register(
+        _nameCtrl.text,
+        _emailCtrl.text,
+        _passCtrl.text,
+      );
+      
       if (!mounted) return;
-      widget.onAuthSuccess();
+      
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Account created successfully! Please log in.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Switch to login screen
+      widget.onSwitch();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -741,19 +821,60 @@ class _SignUpFormState extends State<SignUpForm> {
     }
   }
 
-  void _googleSignUp() async {
-    // For simplicity, we use the same sign-in logic for sign-up
+  Future<void> _handleGoogleAuth() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-    
+
     try {
-      // TODO: Implement MongoDB Atlas Google Sign-Up
-      await Future.delayed(const Duration(seconds: 1));
-      if (!mounted) return;
-      widget.onAuthSuccess();
+      String? name;
+      String? email;
+
+      final creds = await AuthService().googleSignIn.signIn();
+      
+      if (creds != null) {
+        final dynamic data = creds;
+        final String? idToken = data.idToken;
+        final String? accessToken = data.accessToken;
+        
+        if (idToken != null) {
+          Map<String, dynamic> decodedToken = JwtDecoder.decode(idToken);
+          email = decodedToken['email'];
+          name = decodedToken['name'] ?? 'Google User';
+        } else if (accessToken != null) {
+          // Fallback if idToken is omitted by the package
+          try {
+            final response = await http.get(
+              Uri.parse('https://www.googleapis.com/oauth2/v2/userinfo'),
+              headers: {'Authorization': 'Bearer $accessToken'},
+            );
+            if (response.statusCode == 200) {
+              final info = jsonDecode(response.body);
+              email = info['email'];
+              name = info['name'] ?? 'Google User';
+            } else {
+              developer.log('API error: ${response.body}');
+            }
+          } catch (apiError) {
+             developer.log('Exception while calling UserInfo API: $apiError');
+          }
+        } else {
+          developer.log('WARNING: idToken and accessToken are null. Cannot extract email.');
+        }
+      }
+
+      if (email != null) {
+        await AuthService().handleGoogleSignIn(name ?? 'User', email);
+        if (!mounted) return;
+        widget.onAuthSuccess();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     } catch (e) {
+      developer.log('Google Auth Error: $e');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -761,6 +882,8 @@ class _SignUpFormState extends State<SignUpForm> {
       });
     }
   }
+
+  void _googleSignUp() => _handleGoogleAuth();
 
   @override
   Widget build(BuildContext context) {
@@ -941,17 +1064,21 @@ class _AuthTextField extends StatefulWidget {
   final IconData prefixIcon;
   final bool obscureText;
   final Widget? suffixIcon;
-  final TextInputType? keyboardType;
+  final TextInputType keyboardType;
   final String? Function(String?)? validator;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
 
   const _AuthTextField({
     required this.controller,
     required this.hint,
     required this.prefixIcon,
     this.obscureText = false,
+    this.keyboardType = TextInputType.text,
     this.suffixIcon,
-    this.keyboardType,
     this.validator,
+    this.textInputAction,
+    this.onFieldSubmitted,
   });
 
   @override
@@ -970,6 +1097,8 @@ class _AuthTextFieldState extends State<_AuthTextField> {
         obscureText: widget.obscureText,
         keyboardType: widget.keyboardType,
         validator: widget.validator,
+        textInputAction: widget.textInputAction,
+        onFieldSubmitted: widget.onFieldSubmitted,
         style: GoogleFonts.inter(
           fontSize: 14,
           color: AppColors.slate900,

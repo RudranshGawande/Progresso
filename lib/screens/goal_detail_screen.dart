@@ -1065,19 +1065,18 @@ class _TaskListCard extends StatelessWidget {
                         border: Border.all(color: AppColors.slate200),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: TextField(
-                        controller: searchController,
-                        onChanged: onSearchChanged,
-                        style: const TextStyle(fontSize: 13),
-                        decoration: const InputDecoration(
-                          hintText: 'Search tasks...',
-                          hintStyle: TextStyle(color: AppColors.slate400, fontSize: 13),
-                          prefixIcon: Icon(Icons.search, size: 18, color: AppColors.slate400),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.symmetric(vertical: 10),
-                        ),
-                      ),
+                  child: TextField(
+                    controller: searchController,
+                    onChanged: onSearchChanged,
+                    decoration: const InputDecoration(
+                      hintText: 'Search tasks...',
+                      hintStyle: TextStyle(fontSize: 14, color: AppColors.slate400),
+                      prefixIcon: Icon(Icons.search, size: 18, color: AppColors.slate400),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.only(top: 10),
+                    ),
+                  ),
                     ),
                     const SizedBox(width: 12),
                     _TaskSortFilterMenu(
