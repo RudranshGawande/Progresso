@@ -7,7 +7,7 @@ import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart' 
 import 'package:progresso/config/secrets.dart';
 import 'dart:developer' as developer;
 
-class AuthService {
+class AuthService extends ChangeNotifier {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal() {
@@ -72,12 +72,14 @@ class AuthService {
     final sessionData = Map<String, dynamic>.from(user)..remove('password');
     await prefs.setString(_userKey, jsonEncode(sessionData));
     _currentUser = sessionData;
+    notifyListeners();
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_userKey);
     _currentUser = null;
+    notifyListeners();
     try {
       await _googleSignIn.signOut();
     } catch (e) {
@@ -92,6 +94,7 @@ class AuthService {
     if (userJson != null) {
       _currentUser = jsonDecode(userJson);
       developer.log('👤 APP START: Logged in as ${_currentUser!['email']}');
+      notifyListeners();
       return true;
     }
     return false;
@@ -170,7 +173,14 @@ class AuthService {
     }
   }
 
-  Future<void> updateProfile({String? name, String? email, String? bio, String? imageUrl}) async {
+  Future<void> updateProfile({
+    String? name,
+    String? email,
+    String? bio,
+    String? imageUrl,
+    double? rotation,
+    String? localImagePath,
+  }) async {
     final user = _currentUser;
     if (user == null) return;
 
@@ -179,6 +189,8 @@ class AuthService {
     if (email != null) updatedUser['email'] = email;
     if (bio != null) updatedUser['bio'] = bio;
     if (imageUrl != null) updatedUser['imageUrl'] = imageUrl;
+    if (rotation != null) updatedUser['rotation'] = rotation;
+    if (localImagePath != null) updatedUser['localImagePath'] = localImagePath;
 
     try {
       final db = MongoDBService().db;
@@ -189,7 +201,9 @@ class AuthService {
           modify.set('name', updatedUser['name'])
                .set('email', updatedUser['email'])
                .set('bio', updatedUser['bio'])
-               .set('imageUrl', updatedUser['imageUrl']),
+               .set('imageUrl', updatedUser['imageUrl'])
+               .set('rotation', updatedUser['rotation'])
+               .set('localImagePath', updatedUser['localImagePath']),
         );
       }
     } catch (e) {

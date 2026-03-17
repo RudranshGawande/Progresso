@@ -4,6 +4,7 @@ import 'package:progresso/services/auth_service.dart';
 import 'package:progresso/screens/auth_screen.dart';
 import 'package:progresso/widgets/workspace_switcher.dart';
 import 'dart:convert';
+import 'dart:io';
 import 'package:crypto/crypto.dart';
 
 class SidebarWidget extends StatelessWidget {
@@ -99,63 +100,83 @@ class SidebarWidget extends StatelessWidget {
               ),
             ),
             // User profile
-            GestureDetector(
-              onTap: () {
-                if (onItemTap != null) {
-                  onItemTap!('Profile');
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppColors.indigo50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.indigo100),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: AppColors.indigo100,
-                          backgroundImage: NetworkImage(_getAvatarUrl()),
+            ListenableBuilder(
+              listenable: AuthService(),
+              builder: (context, child) {
+                final user = AuthService().currentUser;
+                final email = user?['email'] ?? '';
+                final name = user?['name'] ?? 'Google User';
+                final bio = user?['bio'] ?? 'Product Designer based in San Francisco';
+                final rotation = user?['rotation']?.toDouble() ?? 0.0;
+
+                return GestureDetector(
+                  onTap: () {
+                    if (onItemTap != null) {
+                      onItemTap!('Profile');
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.indigo50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.indigo100),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                AuthService().currentUser?['name'] ??
-                                    'Google User',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.slate900,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
                               ),
-                              const Text(
-                                'Product Designer',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.slate500,
+                              clipBehavior: Clip.antiAlias,
+                              child: Transform.rotate(
+                                angle: rotation * (3.14159 / 180),
+                                child: Image(
+                                  image: _getAvatarProvider(),
+                                  fit: BoxFit.cover,
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
                               ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.slate900,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    bio,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.slate500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
             if (isDrawer)
               const SizedBox(height: 20), // Extra space for drawer bottom
@@ -165,12 +186,27 @@ class SidebarWidget extends StatelessWidget {
     );
   }
 
-  String _getAvatarUrl() {
-    final email = AuthService().currentUser?['email'] ?? '';
-    if (email.isEmpty) return 'https://www.gravatar.com/avatar/?d=mp';
+  ImageProvider _getAvatarProvider() {
+    final user = AuthService().currentUser;
+    final email = user?['email'] ?? '';
+    final imageUrl = user?['imageUrl'];
+    final localImagePath = user?['localImagePath'];
+
+    if (localImagePath != null) {
+      final file = File(localImagePath);
+      if (file.existsSync()) {
+        return FileImage(file);
+      }
+    }
+    
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return NetworkImage(imageUrl);
+    }
+    
+    if (email.isEmpty) return const NetworkImage('https://www.gravatar.com/avatar/?d=mp');
     final bytes = utf8.encode(email.toLowerCase().trim());
     final digest = md5.convert(bytes);
-    return 'https://www.gravatar.com/avatar/$digest?d=mp&s=200';
+    return NetworkImage('https://www.gravatar.com/avatar/$digest?d=mp&s=200');
   }
 }
 
