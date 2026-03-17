@@ -858,13 +858,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ],
     );
   }
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildProfileSummaryCard(Map<String, dynamic>? user, String name, String email) {
     return Container(
