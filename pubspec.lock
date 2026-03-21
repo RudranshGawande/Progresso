@@ -318,11 +318,12 @@ packages:
     source: hosted
     version: "2.0.2"
   google_sign_in_all_platforms_desktop:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: google_sign_in_all_platforms_desktop_custom
-      relative: true
-    source: path
+      name: google_sign_in_all_platforms_desktop
+      sha256: d0ad9f7ed30eb7d8aa5a781ef58d4f1c9c7ad9d7634e27652411436fb6b2c670
+      url: "https://pub.dev"
+    source: hosted
     version: "0.2.0"
   google_sign_in_all_platforms_interface:
     dependency: transitive

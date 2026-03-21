@@ -106,7 +106,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-dependency_overrides:
-  google_sign_in_all_platforms_desktop:
-    path: ./google_sign_in_all_platforms_desktop_custom
