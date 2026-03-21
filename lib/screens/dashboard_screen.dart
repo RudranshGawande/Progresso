@@ -12,6 +12,9 @@ import 'package:progresso/models/goal_models.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/widgets/cta_banner.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:progresso/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class DashboardScreen extends StatelessWidget {
   final Function(Goal)? onGoalTap;
@@ -27,8 +30,9 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: Listenable.merge([GoalService(), settingsNotifier]),
       builder: (context, _) {
         final goals = GoalService().goals;
         return Column(
@@ -42,7 +46,7 @@ class DashboardScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // ── Stat cards ──────────────────────────────────
-                      _buildStatCards(context, goals),
+                      _buildStatCards(context, goals, settingsNotifier),
 
                       const SizedBox(height: 32),
 
@@ -92,14 +96,19 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCards(BuildContext context, List<Goal> goals) {
+  Widget _buildStatCards(BuildContext context, List<Goal> goals, SettingsNotifier settingsNotifier) {
     final bool isMobile = Responsive.isMobile(context);
     final bool isTablet = Responsive.isTablet(context);
 
+    final int firstDay = settingsNotifier.firstDayOfWeek;
+    
     // Calculations
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final startOfThisWeek = today.subtract(Duration(days: today.weekday - 1));
+    
+    // Find start of this week based on settings
+    int daysToSubtract = (today.weekday - firstDay) % 7;
+    final startOfThisWeek = today.subtract(Duration(days: daysToSubtract));
     final startOfLastWeek = startOfThisWeek.subtract(const Duration(days: 7));
 
     double totalHours = 0;
@@ -135,7 +144,7 @@ class DashboardScreen extends StatelessWidget {
              dailyGoalCurrent += hours;
           }
 
-          if (sessionDate.isAfter(startOfThisWeek.subtract(const Duration(days: 1))) && sessionDate.isBefore(today.add(const Duration(days: 1)))) {
+          if (sessionDate.isAfter(startOfThisWeek.subtract(const Duration(days: 1))) && sessionDate.isBefore(startOfThisWeek.add(const Duration(days: 7)))) {
             totalHoursThisWeek += hours;
             focusScoreThisWeek += session.focusScore;
             sessionCountThisWeek++;
@@ -154,9 +163,8 @@ class DashboardScreen extends StatelessWidget {
     
     double hoursTrend = totalHoursLastWeek > 0 ? ((totalHoursThisWeek - totalHoursLastWeek) / totalHoursLastWeek) * 100 : 0;
     double focusTrend = avgFocusLastWeek > 0 ? ((avgFocusThisWeek - avgFocusLastWeek) / avgFocusLastWeek) * 100 : 0;
-    // For visual match, if there's no data, we retain the requested placeholder visual trends
-    final hoursTrendText = hoursTrend == 0 && totalHoursThisWeek == 0 ? '+12%' : '${hoursTrend >= 0 ? '+' : ''}${hoursTrend.toInt()}%';
-    final focusTrendText = focusTrend == 0 && avgFocusThisWeek == 0 ? '+5%' : '${focusTrend >= 0 ? '+' : ''}${focusTrend.toInt()}%';
+    final hoursTrendText = '${hoursTrend >= 0 ? '+' : ''}${hoursTrend.toInt()}%';
+    final focusTrendText = '${focusTrend >= 0 ? '+' : ''}${focusTrend.toInt()}%';
     
     // Determine trend colors
     final hoursTrendColor = hoursTrend >= 0 || (hoursTrend == 0 && totalHoursThisWeek == 0) ? AppColors.emerald500 : AppColors.rose500;
@@ -179,7 +187,7 @@ class DashboardScreen extends StatelessWidget {
         trend: hoursTrendText,
         trendColor: hoursTrendColor,
         trendIcon: hoursTrendIcon,
-        metric: 'Total Hours Worked',
+        metric: AppLocalizations.of(context)!.totalHoursWorked,
         value: '${formatValue(totalHours)}h',
       ),
       StatCard(
@@ -189,7 +197,7 @@ class DashboardScreen extends StatelessWidget {
         trend: focusTrendText,
         trendColor: focusTrendColor,
         trendIcon: focusTrendIcon,
-        metric: 'Focus Score',
+        metric: AppLocalizations.of(context)!.focusScore,
         value: '${avgFocusScore.toInt()}%',
       ),
       StatCard(
@@ -198,7 +206,7 @@ class DashboardScreen extends StatelessWidget {
         iconBgColor: AppColors.primary.withOpacity(0.1),
         trend: 'Today',
         trendColor: AppColors.slate500,
-        metric: 'Daily Goal',
+        metric: AppLocalizations.of(context)!.dailyGoal,
         value: '${formatValue(dailyGoalCurrent)}h',
         targetLabel: '/ ${dailyGoalTarget.toInt()}h target',
         progress: dailyGoalProgress,
@@ -210,7 +218,7 @@ class DashboardScreen extends StatelessWidget {
         trend: maxStreak == 0 ? 'Start' : (maxStreak < 3 ? '-1' : '+1'),
         trendColor: AppColors.rose500,
         trendIcon: maxStreak < 3 ? Icons.trending_down : Icons.trending_up,
-        metric: 'Current Streak',
+        metric: AppLocalizations.of(context)!.currentStreak,
         value: '$maxStreak Days',
       ),
     ];

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:progresso/theme/app_colors.dart';
-import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/models/goal_models.dart';
+import 'package:progresso/services/session_repository.dart';
+import 'package:progresso/services/auth_service.dart';
+import 'package:progresso/widgets/session_card.dart';
 
 
 class RecentSessionsPanel extends StatelessWidget {
@@ -18,105 +20,59 @@ class RecentSessionsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: GoalService(),
-      builder: (context, _) {
-        final goals = GoalService().goals;
-        final taskActivities = <String, Map<String, dynamic>>{};
+    final userId = AuthService().currentUser?['email'] ?? AuthService().currentUser?['auth']?['email'];
+    if (userId == null) return const SizedBox.shrink();
 
-        for (var goal in goals) {
-          for (var task in goal.tasks) {
-            if (task.sessions.isNotEmpty) {
-              // Find the latest session for this task
-              final latestSession = task.sessions.reduce((a, b) => 
-                a.timestamp.isAfter(b.timestamp) ? a : b);
-              
-              taskActivities[task.id] = {
-                'session': latestSession,
-                'task': task,
-                'taskName': task.name,
-                'goalTitle': goal.title,
-                'goal': goal,
-                'historyCount': task.sessions.length,
-              };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Independent Sessions',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate900)),
+            TextButton(
+              onPressed: onViewAll,
+              child: const Text('View All',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        FutureBuilder<List<Map<String, dynamic>>>(
+          // Fetching sessions independently from DB, not from nested goal objects
+          future: SessionRepository().fetchSessionsForGoal('all', userId), // Restricted to current account only
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: CircularProgressIndicator(),
+              ));
             }
-          }
-        }
 
-        final recentTasks = taskActivities.values.toList();
-        recentTasks.sort((a, b) => (b['session'] as FocusSession).timestamp.compareTo((a['session'] as FocusSession).timestamp));
-        final displayedItems = recentTasks.take(4).toList();
-
-        return Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.slate200),
-            boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2)),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Timeline Breakdown',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.slate900)),
-                  TextButton(
-                    onPressed: onViewAll,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('View All',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              if (displayedItems.isEmpty)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Text('No sessions logged yet.', style: TextStyle(color: AppColors.slate400)),
-                  ),
-                )
-              else
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: displayedItems.length,
-                  itemBuilder: (context, index) {
-                    final s = displayedItems[index];
-                    final session = s['session'] as FocusSession;
-                    final startTime = session.timestamp;
-                    final endTime = session.timestamp.add(session.duration);
-                    final timeRange = '${startTime.hour.toString().padLeft(2, '0')}:${startTime.minute.toString().padLeft(2, '0')} - ${endTime.hour.toString().padLeft(2, '0')}:${endTime.minute.toString().padLeft(2, '0')}';
-
-                    return _TimelineTile(
-                      title: s['taskName'],
-                      category: s['goalTitle'],
-                      timeRange: timeRange,
-                      historyCount: s['historyCount'],
-                      isLast: index == displayedItems.length - 1,
-                      onTap: () {
-                        if (onSessionTap != null) {
-                          onSessionTap!.call(s['goal'], s['task'], s['session']);
-                        } else {
-                          onGoalTap?.call(s['goal']);
-                        }
-                      },
-                    );
-                  },
+            final sessions = snapshot.data ?? [];
+            if (sessions.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Text('No independent sessions found in DB.', 
+                    style: TextStyle(color: AppColors.slate400)),
                 ),
-            ],
-          ),
-        );
-      },
+              );
+            }
+
+            // Show latest 3 sessions using the heavy session card
+            final displaySessions = sessions.reversed.take(3).toList();
+
+            return Column(
+              children: displaySessions.map((session) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: SessionCard(session: session, userId: userId),
+              )).toList(),
+            );
+          },
+        ),
+      ],
     );
   }
 }

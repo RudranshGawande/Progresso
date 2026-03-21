@@ -21,7 +21,7 @@ class CTABanner extends StatelessWidget {
         // 1. Dynamic Focus Insight
         int totalHours = goals.fold(0, (sum, g) => sum + g.totalTimeSpent.inHours);
         String insight = totalHours > 0 
-          ? 'Your focus time is up by ${totalHours ~/ 10 + 5}% this week. Keep it up!'
+          ? 'You have spent $totalHours hours focused recently. Keep it up!'
           : 'Ready to kickstart your productivity? Start your first focus session now.';
 
         // 2. Nearest Milestone
@@ -43,7 +43,7 @@ class CTABanner extends StatelessWidget {
         String milestoneText = nearestMilestone != null 
           ? '${nearestMilestone.name} in ${nearestMilestone.deadline.difference(now).inDays}d'
           : 'No upcoming milestones';
-        double milestoneProgress = nearestMilestone != null ? 0.65 : 0.0; // Mock progress for the visual
+        
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(16),
@@ -120,18 +120,6 @@ class CTABanner extends StatelessWidget {
                                 style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.white.withOpacity(0.7))),
-                            if (nearestMilestone != null) ...[
-                              const SizedBox(height: 16),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(999),
-                                child: LinearProgressIndicator(
-                                  value: milestoneProgress,
-                                  minHeight: 6,
-                                  backgroundColor: Colors.white.withOpacity(0.2),
-                                  valueColor: const AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              ),
-                            ]
                           ],
                         ),
                       ),
