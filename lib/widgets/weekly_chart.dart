@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/services/goal_service.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:provider/provider.dart';
+import 'package:progresso/l10n/app_localizations.dart';
 
 class WeeklyProgressChart extends StatelessWidget {
   const WeeklyProgressChart({super.key});
@@ -9,9 +12,10 @@ class WeeklyProgressChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
     
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: Listenable.merge([GoalService(), settingsNotifier]),
       builder: (context, _) {
         final goals = GoalService().goals;
         final List<double> weeklyEffort = List.filled(7, 0.0);
@@ -26,15 +30,16 @@ class WeeklyProgressChart extends StatelessWidget {
           }
         }
 
+        final settingsNotifier = Provider.of<SettingsNotifier>(context);
+        final int firstDay = settingsNotifier.firstDayOfWeek;
         final days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
         final List<(String, double)> bars = [];
         
-        // Scale: 1.0 = 8 hours of work (arbitrary max for visualization)
         for (int i = 0; i < 7; i++) {
-          double pct = (weeklyEffort[i] / 8.0).clamp(0.0, 1.0);
-          // If all values are very small, maybe scale differently? 
-          // For now let's stick to 8h max.
-          bars.add((days[i], pct));
+          // (firstDay - 1 + i) % 7 maps 0..6 to the weekday index (0=Mon, 6=Sun)
+          final int dayIdx = (firstDay - 1 + i) % 7;
+          double pct = (weeklyEffort[dayIdx] / 8.0).clamp(0.0, 1.0);
+          bars.add((days[dayIdx], pct));
         }
 
         return Container(
@@ -62,16 +67,16 @@ class WeeklyProgressChart extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Weekly Progress',
-                            style: TextStyle(
+                        Text(AppLocalizations.of(context)!.weeklyProgress,
+                            style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: AppColors.slate900)),
                         const SizedBox(height: 4),
                         Text(
                             isMobile
-                                ? 'Focus: ${totalWeekHours.toStringAsFixed(1)}h'
-                                : 'Total focus hours this week: ${totalWeekHours.toStringAsFixed(1)}h',
+                                ? AppLocalizations.of(context)!.focus(totalWeekHours.toStringAsFixed(1))
+                                : AppLocalizations.of(context)!.totalFocusHours(totalWeekHours.toStringAsFixed(1)),
                             style: const TextStyle(
                                 fontSize: 14, color: AppColors.slate500)),
                       ],
@@ -80,18 +85,18 @@ class WeeklyProgressChart extends StatelessWidget {
                   if (!isMobile)
                     Row(
                       children: [
-                        _LegendDot(color: AppColors.primary, label: 'Current'),
+                        _LegendDot(color: AppColors.primary, label: AppLocalizations.of(context)!.current),
                         const SizedBox(width: 16),
-                        _LegendDot(color: AppColors.slate200, label: 'Previous'),
+                        _LegendDot(color: AppColors.slate200, label: AppLocalizations.of(context)!.previous),
                       ],
                     )
                   else
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        _LegendDot(color: AppColors.primary, label: 'Current'),
+                        _LegendDot(color: AppColors.primary, label: AppLocalizations.of(context)!.current),
                         const SizedBox(height: 4),
-                        _LegendDot(color: AppColors.slate200, label: 'Previous'),
+                        _LegendDot(color: AppColors.slate200, label: AppLocalizations.of(context)!.previous),
                       ],
                     ),
                 ],

@@ -19,6 +19,7 @@ class AppColors {
 
   static const Color indigo50 = Color(0xFFEEF2FF);
   static const Color indigo100 = Color(0xFFE0E7FF);
+  static const Color indigo200 = Color(0xFFC7D2FE);
   static const Color indigo500 = Color(0xFF6366F1);
   static const Color indigo600 = Color(0xFF4F46E5);
 
@@ -40,6 +41,7 @@ class AppColors {
 
   static const Color rose50 = Color(0xFFFFF1F2);
   static const Color rose100 = Color(0xFFFFE4E6);
+  static const Color rose200 = Color(0xFFFECDD3);
   static const Color rose500 = Color(0xFFF43F5E);
   static const Color rose600 = Color(0xFFE11D48);
 

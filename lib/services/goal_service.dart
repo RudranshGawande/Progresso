@@ -3,113 +3,45 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:progresso/models/goal_models.dart';
 import 'package:progresso/services/session_manager.dart';
+import 'package:progresso/services/auth_service.dart';
+import 'package:progresso/services/session_repository.dart';
+import 'package:progresso/services/goal_repository.dart';
+import 'dart:developer' as developer;
 
 class GoalService extends ChangeNotifier {
   static final GoalService _instance = GoalService._internal();
   factory GoalService() => _instance;
   GoalService._internal();
 
-  static const String _storageKey = 'progresso_goals';
+  static const String _personalKey = 'progresso_goals_v2';
+  String _currentWorkspaceId = 'personal';
   List<Goal> _goals = [];
   bool _initialized = false;
+
+  String get _storageKey => _currentWorkspaceId == 'personal'
+      ? _personalKey
+      : 'progresso_goals_v2_$_currentWorkspaceId';
 
   List<Goal> get goals => _goals;
 
   Future<void> init() async {
-    if (_initialized) return;
+    await loadWorkspace('personal');
+  }
+
+  Future<void> loadWorkspace(String workspaceId) async {
+    _currentWorkspaceId = workspaceId;
     final prefs = await SharedPreferences.getInstance();
     final String? goalsJson = prefs.getString(_storageKey);
 
     if (goalsJson != null) {
       final List<dynamic> data = jsonDecode(goalsJson);
       _goals = data.map((g) => Goal.fromJson(g)).toList();
-    } else {
-      // Create default "Exam Prep" session on first launch
-      _goals = [
-        Goal(
-          id: 'exam_prep_default',
-          title: 'Exam Prep',
-          description: 'Focus on upcoming analytics certification and core concepts.',
-          dueDate: DateTime.now().add(const Duration(days: 14)),
-          icon: Icons.school,
-          imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD9QJ_LVBXza2ziIOuTjHIhBsAb0-GKCtjEvzPsPCTdttR7xoxn5p2PxUXPG5Hcwkd3pSU6-l95dIwsV-nFWQ_Zn21LOu0jiFdCnUIZN4xvAI1jg4KTCOFB8wqCcBomckeuE-tRCPnH6f7rYRU_58NUkKXCgpLrujuyLqBGDt82O3aAZ4tzK-zOA2sJa7fjC-TAGD61Muj4h_gRt7H1sUrBkc_O4_y-rqOZcpZVZt5W998QnletUnN8jXPHM6LrkcVrOlw3FvJYnuwa',
-          tasks: [
-            GoalTask(
-              id: 'task_ui',
-              name: 'UI Design System',
-              deadline: DateTime.now().add(const Duration(days: 2)),
-              priority: TaskPriority.high,
-              sessions: List.generate(14, (i) => FocusSession(
-                id: 's_ui_$i',
-                duration: const Duration(hours: 2, minutes: 15),
-                intensity: 0.9,
-                focusScore: 88,
-                trendData: [0.4, 0.6, 0.8, 0.9],
-                timestamp: DateTime.now().subtract(Duration(days: i, hours: 2)),
-              )),
-            ),
-            GoalTask(
-              id: 'task_email',
-              name: 'Email Triage',
-              deadline: DateTime.now().add(const Duration(days: 3)),
-              priority: TaskPriority.medium,
-              sessions: List.generate(8, (i) => FocusSession(
-                id: 's_email_$i',
-                duration: const Duration(minutes: 45),
-                intensity: 0.6,
-                focusScore: 75,
-                trendData: [0.5, 0.5, 0.6, 0.6],
-                timestamp: DateTime.now().subtract(Duration(days: i, hours: 4)),
-              )),
-            ),
-            GoalTask(
-              id: 'task_sprint',
-              name: 'Sprint Planning',
-              deadline: DateTime.now().add(const Duration(days: 1)),
-              priority: TaskPriority.high,
-              sessions: List.generate(3, (i) => FocusSession(
-                id: 's_sprint_$i',
-                duration: const Duration(hours: 1, minutes: 30),
-                intensity: 0.8,
-                focusScore: 82,
-                trendData: [0.4, 0.7, 0.8, 0.8],
-                timestamp: DateTime.now().subtract(Duration(days: i, hours: 6)),
-              )),
-            ),
-            GoalTask(
-              id: 'task_bugs',
-              name: 'Bug Fixes',
-              deadline: DateTime.now().add(const Duration(days: 5)),
-              priority: TaskPriority.high,
-              sessions: List.generate(21, (i) => FocusSession(
-                id: 's_bugs_$i',
-                duration: const Duration(hours: 2),
-                intensity: 0.95,
-                focusScore: 94,
-                trendData: [0.7, 0.8, 0.9, 0.95],
-                timestamp: DateTime.now().subtract(Duration(days: i, hours: 8)),
-              )),
-            ),
-          ],
-          totalTimeSpent: const Duration(hours: 42),
-          dailyEffort: [4.2, 5.5, 6.0, 4.0, 5.0, 3.5, 2.0],
-          activities: [
-            GoalActivity(
-              id: 'act_1',
-              title: 'Completed "Review Module 1"',
-              timestamp: DateTime.now().subtract(const Duration(days: 1)),
-              type: ActivityType.taskCompleted,
-              taskId: 'task_1',
-            ),
-            GoalActivity(
-              id: 'act_0',
-              title: 'Session Created',
-              timestamp: DateTime.now().subtract(const Duration(days: 2)),
-              type: ActivityType.goalCreated,
-            ),
-          ],
-        )
-      ];
+      // Ensure existing local data is immediately synced to MongoDB
+      saveGoals();
+    } 
+
+    if (goalsJson == null) {
+      _goals = [];
       await saveGoals();
     }
     _initialized = true;
@@ -120,23 +52,37 @@ class GoalService extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final String goalsJson = jsonEncode(_goals.map((g) => g.toJson()).toList());
     await prefs.setString(_storageKey, goalsJson);
+    
+    // Proactive MongoDB Sync: Mirror current state to Atlas
+    final user = AuthService().currentUser;
+    final String? userId = user?['email'] ?? user?['auth']?['email'];
+    if (userId != null) {
+      developer.log('🔄 SYNC: Pushing ${_goals.length} goals to MongoDB for $userId');
+      for (final goal in _goals) {
+        final success = await GoalRepository().saveGoal(userId, goal);
+        if (!success) {
+          developer.log('⚠️ SYNC: Failed to push goal "${goal.title}" to MongoDB');
+        }
+      }
+    }
+    
     notifyListeners();
   }
 
-  void addGoal(Goal goal) {
+  Future<void> addGoal(Goal goal) async {
     _goals.insert(0, goal);
-    saveGoals();
+    await saveGoals();
   }
 
-  void updateGoal(Goal goal) {
+  Future<void> updateGoal(Goal goal) async {
     final index = _goals.indexWhere((g) => g.id == goal.id);
     if (index != -1) {
       _goals[index] = goal;
-      saveGoals();
+      await saveGoals();
     }
   }
 
-  void deleteGoal(String goalId) {
+  Future<void> deleteGoal(String goalId) async {
     final goalIndex = _goals.indexWhere((g) => g.id == goalId);
     if (goalIndex != -1) {
       final goal = _goals[goalIndex];
@@ -145,12 +91,12 @@ class GoalService extends ChangeNotifier {
         SessionManager().deleteSession(task.id);
       }
       _goals.removeAt(goalIndex);
-      saveGoals();
+      await saveGoals();
     }
   }
 
   // Task specific updates to trigger notifyListeners properly
-  void addTask(String goalId, GoalTask task) {
+  Future<void> addTask(String goalId, GoalTask task) async {
     final goal = _goals.firstWhere((g) => g.id == goalId);
     goal.tasks.add(task);
     goal.activities.insert(0, GoalActivity(
@@ -160,10 +106,10 @@ class GoalService extends ChangeNotifier {
       type: ActivityType.taskAdded,
       taskId: task.id,
     ));
-    saveGoals();
+    await saveGoals();
   }
 
-  void toggleTaskCompletion(String goalId, String taskId) {
+  Future<void> toggleTaskCompletion(String goalId, String taskId) async {
     final goal = _goals.firstWhere((g) => g.id == goalId);
     final task = goal.tasks.firstWhere((t) => t.id == taskId);
     task.isCompleted = !task.isCompleted;
@@ -181,10 +127,10 @@ class GoalService extends ChangeNotifier {
       // Optionally remove completion activity
       goal.activities.removeWhere((a) => a.taskId == taskId && a.type == ActivityType.taskCompleted);
     }
-    saveGoals();
+    await saveGoals();
   }
 
-  void deleteTask(String goalId, String taskId) {
+  Future<void> deleteTask(String goalId, String taskId) async {
     final goal = _goals.firstWhere((g) => g.id == goalId);
     final taskIndex = goal.tasks.indexWhere((t) => t.id == taskId);
     if (taskIndex != -1) {
@@ -199,18 +145,18 @@ class GoalService extends ChangeNotifier {
       
       goal.tasks.removeAt(taskIndex);
       goal.activities.removeWhere((a) => a.taskId == taskId);
-      saveGoals();
+      await saveGoals();
     }
   }
 
-  void addActivities(String goalId, List<GoalActivity> activities) {
+  Future<void> addActivities(String goalId, List<GoalActivity> activities) async {
     final goal = _goals.firstWhere((g) => g.id == goalId);
     goal.activities.addAll(activities);
     goal.activities.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    saveGoals();
+    await saveGoals();
   }
 
-  void addSessionToTask(String goalId, String taskId, FocusSession session) {
+  Future<void> addSessionToTask(String goalId, String taskId, FocusSession session) async {
     final goal = _goals.firstWhere((g) => g.id == goalId);
     final task = goal.tasks.firstWhere((t) => t.id == taskId);
     task.sessions.add(session);
@@ -231,6 +177,26 @@ class GoalService extends ChangeNotifier {
       taskId: task.id,
     ));
     
-    saveGoals();
+    await saveGoals();
+    
+    // Proactive MongoDB Sync: Session Reference Requirement
+    final user = AuthService().currentUser;
+    final String? userId = user?['email'] ?? user?['auth']?['email'];
+    if (userId != null) {
+      // Ensure task has necessary metadata for DB storage
+      task.userId = userId;
+      task.goalId = goalId;
+      task.sessionId = session.id;
+
+      // 1. Flush independent session document
+      await SessionRepository().createSession(
+        goalId: goalId,
+        userId: userId,
+        session: session,
+      );
+      
+      // 2. Add current task to session if it doesn't already exist in session_tasks
+      await SessionRepository().addTaskToSession(task);
+    }
   }
 }
