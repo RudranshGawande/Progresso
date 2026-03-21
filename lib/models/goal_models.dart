@@ -6,7 +6,15 @@ enum GoalStatus { active, completed, paused }
 enum SessionStatus { active, paused, completed }
 enum FocusSessionType { free, timed }
 
-enum ActivityType { taskCompleted, sessionCompleted, taskAdded, goalCreated }
+enum ActivityType { 
+  taskCreated, 
+  taskCompleted, 
+  taskDeleted, 
+  sessionStarted, 
+  sessionCompleted, 
+  taskAdded, 
+  goalCreated 
+}
 
 class FocusSession {
   final String id;
@@ -56,6 +64,14 @@ class GoalTask {
   List<FocusSession> sessions;
   FocusSessionType? sessionType;
   int? defaultDuration; // seconds
+  String? sessionId;
+  String? goalId;
+  String? userId;
+  int progress; // 0-100
+  String timerType; // countdown, stopwatch
+  String timerMode; // fixed, continuous
+  int durationMinutes; // for fixed countdown
+  int remainingSeconds; // current timer state
 
   GoalTask({
     required this.id,
@@ -68,8 +84,17 @@ class GoalTask {
     List<FocusSession>? sessions,
     this.sessionType,
     this.defaultDuration,
+    this.sessionId,
+    this.goalId,
+    this.userId,
+    this.progress = 0,
+    this.timerType = 'countdown',
+    this.timerMode = 'fixed',
+    this.durationMinutes = 25,
+    int? remainingSeconds,
     DateTime? createdAt,
   })  : sessions = sessions ?? [],
+        remainingSeconds = remainingSeconds ?? (durationMinutes * 60),
         createdAt = createdAt ?? DateTime.now();
 
   String get priorityLabel {
@@ -87,30 +112,47 @@ class GoalTask {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'taskId': id, // MongoDB schema compatibility
     'name': name,
+    'title': name, // MongoDB schema compatibility
     'priority': priority.name,
     'deadline': deadline.toIso8601String(),
     'isCompleted': isCompleted,
+    'status': isCompleted ? 'completed' : 'active',
     'createdAt': createdAt.toIso8601String(),
     'completedAt': completedAt?.toIso8601String(),
     'timeSpent': timeSpent?.inSeconds,
-    'sessions': sessions.map((s) => s.toJson()).toList(),
     'sessionType': sessionType?.name,
     'defaultDuration': defaultDuration,
+    'sessionId': sessionId,
+    'goalId': goalId,
+    'userId': userId,
+    'progress': progress,
+    'timerType': timerType,
+    'timerMode': timerMode,
+    'durationMinutes': durationMinutes,
+    'remainingSeconds': remainingSeconds,
   };
 
   factory GoalTask.fromJson(Map<String, dynamic> json) => GoalTask(
-    id: json['id'],
-    name: json['name'],
-    priority: TaskPriority.values.byName(json['priority']),
+    id: json['id'] ?? json['taskId'],
+    name: json['name'] ?? json['title'],
+    priority: TaskPriority.values.byName(json['priority'] ?? 'medium'),
     deadline: DateTime.parse(json['deadline']),
-    isCompleted: json['isCompleted'],
+    isCompleted: json['isCompleted'] ?? (json['status'] == 'completed'),
     createdAt: DateTime.parse(json['createdAt']),
     completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
     timeSpent: json['timeSpent'] != null ? Duration(seconds: json['timeSpent']) : null,
-    sessions: (json['sessions'] as List).map((s) => FocusSession.fromJson(s)).toList(),
     sessionType: json['sessionType'] != null ? FocusSessionType.values.byName(json['sessionType']) : null,
     defaultDuration: json['defaultDuration'],
+    sessionId: json['sessionId'],
+    goalId: json['goalId'],
+    userId: json['userId'],
+    progress: json['progress'] ?? 0,
+    timerType: json['timerType'] ?? 'countdown',
+    timerMode: json['timerMode'] ?? 'fixed',
+    durationMinutes: json['durationMinutes'] ?? 25,
+    remainingSeconds: json['remainingSeconds'],
   );
 }
 

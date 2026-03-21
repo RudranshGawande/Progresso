@@ -4,6 +4,7 @@ import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/widgets/focus_session_dialog.dart';
+import 'package:progresso/l10n/app_localizations.dart';
 
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({super.key});
@@ -38,7 +39,7 @@ class DashboardHeader extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Dashboard Overview',
+                  AppLocalizations.of(context)!.dashboardOverview,
                   style: TextStyle(
                     fontSize: isMobile ? 18 : 20,
                     fontWeight: FontWeight.bold,
@@ -47,9 +48,9 @@ class DashboardHeader extends StatelessWidget {
                 ),
                 if (!isMobile) ...[
                   const SizedBox(height: 2),
-                  const Text(
-                    "Welcome back, here's what's happening today.",
-                    style: TextStyle(fontSize: 14, color: AppColors.slate500),
+                  Text(
+                    AppLocalizations.of(context)!.welcomeBack,
+                    style: const TextStyle(fontSize: 14, color: AppColors.slate500),
                   ),
                 ],
               ],
@@ -65,7 +66,7 @@ class DashboardHeader extends StatelessWidget {
                 border: Border.all(color: AppColors.slate200),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   SizedBox(width: 12),
                   Icon(Icons.search, color: AppColors.slate400, size: 18),
@@ -73,8 +74,8 @@ class DashboardHeader extends StatelessWidget {
                   Expanded(
                     child: TextField(
                       decoration: InputDecoration(
-                        hintText: 'Search sessions...',
-                        hintStyle: TextStyle(fontSize: 14, color: AppColors.slate400),
+                        hintText: AppLocalizations.of(context)!.searchSessions,
+                        hintStyle: const TextStyle(fontSize: 14, color: AppColors.slate400),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -122,7 +123,7 @@ class DashboardHeader extends StatelessWidget {
             ),
             icon: Icon(Icons.play_circle, size: isMobile ? 18 : 22),
             label: Text(
-              isMobile ? 'Start' : 'Start New Session',
+              isMobile ? AppLocalizations.of(context)!.start : AppLocalizations.of(context)!.startNewSession,
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),

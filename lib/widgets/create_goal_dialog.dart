@@ -48,25 +48,34 @@ class _CreateGoalDialogState extends State<CreateGoalDialog> {
     return Icons.flag;
   }
 
+  /// Returns a stable, seeded Picsum image URL so the same goal title
+  /// always shows the same image across every session.
   String _getImageForTitle(String title) {
     final t = title.toLowerCase();
-    if (t.contains('exam') || t.contains('study')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuD9QJ_LVBXza2ziIOuTjHIhBsAb0-GKCtjEvzPsPCTdttR7xoxn5p2PxUXPG5Hcwkd3pSU6-l95dIwsV-nFWQ_Zn21LOu0jiFdCnUIZN4xvAI1jg4KTCOFB8wqCcBomckeuE-tRCPnH6f7rYRU_58NUkKXCgpLrujuyLqBGDt82O3aAZ4tzK-zOA2sJa7fjC-TAGD61Muj4h_gRt7H1sUrBkc_O4_y-rqOZcpZVZt5W998QnletUnN8jXPHM6LrkcVrOlw3FvJYnuwa';
+    // Category → fixed Picsum seed (deterministic per category)
+    if (t.contains('exam') || t.contains('study') || t.contains('learn')) {
+      return 'https://picsum.photos/seed/study/800/400'; // books / study theme
     }
-    if (t.contains('design') || t.contains('skill')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuBarbCp4lSeTjvuTeJKaPDSyR1nHueV9Kf5VCLz2G2QVTSiXw4FgDFOcyqDO2H9efLiYTUy8dhPfV1bbP3NkPXHqqmLqOK6SB29KFn5t1T44JVdHPnw-Xa2UTSOFROCZqO9rk79YV0PtUmzQHGp8iPyJVXUy9wZImN6dI_siZr5RzIVmPlZoM7OoBPYeQkgriOu6UTd88IGDfAxpUNEx6Ly3_m0oinvHFB3fMLDmjgp7smgxemnfA8uj2C_OXLtZ-M2AOIZRCXzAxzG';
+    if (t.contains('design') || t.contains('creative') || t.contains('art')) {
+      return 'https://picsum.photos/seed/design/800/400';
     }
-    if (t.contains('work') || t.contains('project')) {
-      return 'https://lh3.googleusercontent.com/aida-public/AB6AXuAWpMNj0Ezm1mYtevKRBBKG3uZ39JBbPjpdBKkgrCp0dBxriSct9kjWTm_6YQsDLFwv-j54mJjSsebkMjFD6o638PBfvVM_LWGiS1VB8NrSUhYpowon3F2LttbWpVbhoU86vZB1hDTUOp9-_1eHAGKtGxAs19P6MedZv3N9Zv4WKilG3IlwCZMKoQnVYzSvU4-aAdL6BXVb372ZL3YDAcMdZfjveUXUW2Dc8gb23Z3CIVNDA17lXOerJbr_xKSc5-2QknAwKih2CjsF';
+    if (t.contains('work') || t.contains('project') || t.contains('business')) {
+      return 'https://picsum.photos/seed/work/800/400';
     }
-    
-    final fallbacks = [
-      'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=400&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1552664730-d307ca884978?q=80&w=400&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&auto=format&fit=crop',
-      'https://images.unsplash.com/photo-1454165833767-027ffea9e787?q=80&w=400&auto=format&fit=crop',
-    ];
-    return fallbacks[title.length % fallbacks.length];
+    if (t.contains('health') || t.contains('gym') || t.contains('workout') || t.contains('fit')) {
+      return 'https://picsum.photos/seed/health/800/400';
+    }
+    if (t.contains('code') || t.contains('program') || t.contains('develop') || t.contains('web') || t.contains('app')) {
+      return 'https://picsum.photos/seed/coding/800/400';
+    }
+    if (t.contains('machine') || t.contains('ai') || t.contains('data') || t.contains('ml')) {
+      return 'https://picsum.photos/seed/technology/800/400';
+    }
+    // Stable fallback: seed derived from title characters so same title → same image
+    final seed = title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').isEmpty
+        ? 'goal'
+        : title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    return 'https://picsum.photos/seed/$seed/800/400';
   }
 
   void _submit() {

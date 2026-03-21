@@ -6,7 +6,11 @@ import 'package:progresso/services/session_manager.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/services/mongodb_service.dart';
 import 'package:progresso/services/auth_service.dart';
-import 'package:progresso/theme/theme_notifier.dart';
+import 'package:progresso/services/database_index_service.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:progresso/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 import 'dart:developer' as developer;
 import 'package:flutter/services.dart';
 
@@ -20,6 +24,8 @@ void main() async {
     // Attempt MongoDB connection (Requires password in mongodb_service.dart)
     try {
       await MongoDBService().connect();
+      // Ensure all collection indexes exist for query performance
+      await DatabaseIndexService().ensureIndexes();
     } catch (e) {
       developer.log('MongoDB not connected yet. Ensure password is set in mongodb_service.dart');
     }
@@ -40,33 +46,50 @@ class ProgressoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: themeNotifier,
+      listenable: settingsNotifier,
       builder: (context, _) {
         return Shortcuts(
           shortcuts: <ShortcutActivator, Intent>{
             SingleActivator(LogicalKeyboardKey.backspace): const DeleteCharacterIntent(forward: false),
             SingleActivator(LogicalKeyboardKey.delete): const DeleteCharacterIntent(forward: true),
           },
-          child: MaterialApp(
-            title: 'PROGRESSO',
-            debugShowCheckedModeBanner: false,
-            themeMode: themeNotifier.themeMode,
-            theme: ThemeData(
-              useMaterial3: true,
-              colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5048E5)),
-              textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
-              scaffoldBackgroundColor: const Color(0xFFF6F6F8),
-            ),
-            darkTheme: ThemeData(
-              useMaterial3: true,
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xFF5048E5), 
-                brightness: Brightness.dark
+          child: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<SettingsNotifier>.value(value: settingsNotifier),
+              ChangeNotifierProvider<AuthService>.value(value: AuthService()),
+            ],
+            child: MaterialApp(
+              title: 'PROGRESSO',
+              debugShowCheckedModeBanner: false,
+              themeMode: settingsNotifier.themeMode,
+              locale: settingsNotifier.locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: const [
+                Locale('en'),
+                Locale('es'),
+              ],
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5048E5)),
+                textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
+                scaffoldBackgroundColor: const Color(0xFFF6F6F8),
               ),
-              textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-              scaffoldBackgroundColor: const Color(0xFF0F172A),
+              darkTheme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: const Color(0xFF5048E5), 
+                  brightness: Brightness.dark
+                ),
+                textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
+                scaffoldBackgroundColor: const Color(0xFF0F172A),
+              ),
+              home: isLoggedIn ? const MainShell() : const AuthScreen(),
             ),
-            home: isLoggedIn ? const MainShell() : const AuthScreen(),
           ),
         );
       },

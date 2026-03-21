@@ -81,9 +81,9 @@ class _GoalsOverviewScreenState extends State<GoalsOverviewScreen> {
     final overallProgress = totalTasksCount > 0 ? (totalCompletedCount / totalTasksCount) : 0.0;
 
     final cards = [
-      _SummaryCard(label: 'Tasks in Progress', value: '$tasksInProgressCount', trend: '+2%', isPositive: true),
-      _SummaryCard(label: 'Total Completed', value: '$totalCompletedCount', trend: 'Global', isPositive: true),
-      _SummaryCard(label: 'Overall Efficiency', value: '${(overallProgress * 100).toInt()}%', trend: '+5%', isPositive: true),
+      _SummaryCard(label: 'Tasks in Progress', value: '$tasksInProgressCount', trend: '', isPositive: true),
+      _SummaryCard(label: 'Total Completed', value: '$totalCompletedCount', trend: '', isPositive: true),
+      _SummaryCard(label: 'Overall Efficiency', value: '${(overallProgress * 100).toInt()}%', trend: '', isPositive: true),
     ];
 
     if (isMobile) {
@@ -260,21 +260,22 @@ class _SummaryCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label, style: const TextStyle(color: AppColors.slate500, fontSize: 13, fontWeight: FontWeight.w500)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isPositive ? const Color(0xFFECFDF5) : const Color(0xFFFFF1F2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  trend,
-                  style: TextStyle(
-                    color: isPositive ? const Color(0xFF059669) : const Color(0xFFE11D48),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+              if (trend.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isPositive ? const Color(0xFFECFDF5) : const Color(0xFFFFF1F2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    trend,
+                    style: TextStyle(
+                      color: isPositive ? const Color(0xFF059669) : const Color(0xFFE11D48),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -336,7 +337,7 @@ class _ActiveGoalsSection extends StatelessWidget {
               dueDate: DateFormat('MMM dd').format(goal.dueDate),
               icon: goal.icon,
               onTap: () => onGoalTap(goal),
-              imageUrl: goal.imageUrl ?? 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=400&auto=format&fit=crop',
+              imageUrl: goal.imageUrl,
             );
           },
         ),
@@ -352,7 +353,7 @@ class _GoalCard extends StatelessWidget {
   final String tasks;
   final String dueDate;
   final IconData icon;
-  final String imageUrl;
+  final String? imageUrl;
   final VoidCallback? onTap;
 
   const _GoalCard({
@@ -389,12 +390,43 @@ class _GoalCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                Image.network(
-                  imageUrl,
-                  height: 100, // Reduced from 120
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
+                if (imageUrl != null && imageUrl!.isNotEmpty)
+                  Image.network(
+                    imageUrl!,
+                    height: 100,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (_, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
+                        height: 100,
+                        color: AppColors.slate100,
+                        child: const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      );
+                    },
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 100,
+                      color: AppColors.slate100,
+                      child: Center(
+                        child: Icon(Icons.image_not_supported_outlined, color: AppColors.slate300, size: 32),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    height: 100,
+                    width: double.infinity,
+                    color: AppColors.primary.withOpacity(0.05),
+                    child: Center(
+                      child: Icon(icon, size: 40, color: AppColors.primary.withOpacity(0.5)),
+                    ),
+                  ),
                 Positioned(
                   top: 12,
                   right: 12,

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:progresso/screens/auth_screen.dart';
 import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/widgets/sidebar.dart';
@@ -16,6 +18,9 @@ import 'package:progresso/services/workspace_service.dart';
 import 'package:progresso/screens/community_dashboard_screen.dart';
 import 'package:progresso/screens/community_analysis_screen.dart';
 import 'package:progresso/screens/community_goals_screen.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:progresso/services/security_service.dart';
+import 'package:provider/provider.dart';
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -30,6 +35,8 @@ class _MainShellState extends State<MainShell> {
   bool _showingArchive = false;
   Goal? _selectedGoal;
 
+  Timer? _sessionValidationTimer;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +44,31 @@ class _MainShellState extends State<MainShell> {
     if (GoalService().goals.isNotEmpty) {
       _selectedGoal = GoalService().goals.first;
     }
+    
+    // Periodic check to see if THIS device was logged out from another device
+    _startSessionGuard();
+  }
+
+  void _startSessionGuard() {
+    _sessionValidationTimer?.cancel();
+    _sessionValidationTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      final isValid = await SecurityService().validateCurrentSession();
+      if (!isValid && mounted) {
+        timer.cancel();
+        if (context.mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => AuthScreen()),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sessionValidationTimer?.cancel();
+    super.dispose();
   }
 
   void _onNavChange(String item) {
@@ -74,8 +106,9 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([GoalService(), WorkspaceService()]),
+      listenable: Listenable.merge([GoalService(), WorkspaceService(), settingsNotifier]),
       builder: (context, _) {
         final goals = GoalService().goals;
         

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:progresso/theme/app_colors.dart';
 import 'package:progresso/services/auth_service.dart';
 import 'package:progresso/screens/auth_screen.dart';
-import 'package:progresso/theme/theme_notifier.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:progresso/l10n/app_localizations.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
@@ -12,16 +14,31 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'dart:developer' as developer;
+import 'package:progresso/services/security_service.dart';
+import 'package:progresso/models/security_models.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:mongo_dart/mongo_dart.dart' show where, modify, ObjectId;
+import 'package:progresso/services/mongodb_service.dart';
+import 'package:progresso/config/db_collections.dart';
 
 enum ProfileSection {
   personalInfo,
   accountSettings,
-  security,
-  workspaces,
-  notifications,
-  billing,
-  activity,
-  integrations
+  security
+}
+
+
+class _PickerOption {
+  final String label;
+  final dynamic value;
+  final bool isActive;
+
+  _PickerOption({
+    required this.label,
+    required this.value,
+    required this.isActive,
+  });
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -47,17 +64,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize controllers with current user data
     final user = AuthService().currentUser;
-    _nameCtrl = TextEditingController(text: user?['name'] ?? 'Google User');
-    _emailCtrl = TextEditingController(text: user?['email'] ?? 'Unknown');
-    _bioCtrl = TextEditingController(text: user?['bio'] ?? 'Product Designer based in San Francisco');
-    _imageUrl = user?['imageUrl'];
-    _rotation = user?['rotation']?.toDouble() ?? 0.0;
-    if (user?['localImagePath'] != null) {
-      _localImageFile = File(user!['localImagePath']);
-    }
+    _nameCtrl = TextEditingController(text: user?['name'] ?? '');
+    _emailCtrl = TextEditingController(text: user?['email'] ?? '');
+    _bioCtrl = TextEditingController(text: user?['bio'] ?? '');
+    _applyUserData(user);
+
+    // Refresh user data from DB whenever we enter the profile screen
+    AuthService().refreshUser();
     
-    _selectedTheme = themeNotifier.themeMode == ThemeMode.dark ? 'Dark Mode' : 'Light Mode';
+    // Listen for changes in AuthService to update UI in real-time
+    AuthService().addListener(_onAuthChanged);
+    
+    _selectedTheme = settingsNotifier.themeMode == ThemeMode.dark ? 'Dark Mode' : 'Light Mode';
     
     _nameCtrl.addListener(() {
       setState(() {});
@@ -67,8 +87,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  void _onAuthChanged() {
+    if (!mounted) return;
+    final user = AuthService().currentUser;
+    _applyUserData(user);
+    setState(() {});
+  }
+
+  void _applyUserData(Map<String, dynamic>? user) {
+    if (user == null) return;
+    
+    // Strict requirement: Bound to user.profile.bio, with multiple fallback lookups
+    final String bio = user['profile']?['bio']?.toString() ?? user['bio']?.toString() ?? '';
+    final String name = user['profile']?['name']?.toString() ?? user['name']?.toString() ?? '';
+    final String email = user['auth']?['email']?.toString() ?? user['email'] ?? '';
+
+    developer.log('👤 UI: Applying User Data. Name: $name, Email: $email, Bio Length: ${bio.length}');
+
+    // Only update controllers if the values have actually changed to avoid cursor jumps
+    if (_nameCtrl.text != name && name.isNotEmpty) {
+      _nameCtrl.text = name;
+    }
+    if (_emailCtrl.text != email && email.isNotEmpty) {
+      _emailCtrl.text = email;
+    }
+    
+    // Crucial fix: Only update controller if new bio is non-null and different
+    if (_bioCtrl.text != bio) {
+      _bioCtrl.text = bio;
+    }
+    
+    _imageUrl = user['profile']?['avatarUrl'] ?? user['imageUrl'];
+    _rotation = user['rotation']?.toDouble() ?? 0.0;
+    if (user['localImagePath'] != null) {
+      _localImageFile = File(user['localImagePath']);
+    }
+  }
+
   @override
   void dispose() {
+    AuthService().removeListener(_onAuthChanged);
     _nameCtrl.dispose();
     _emailCtrl.dispose();
     _bioCtrl.dispose();
@@ -80,6 +138,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_localImageFile != null && _localImageFile!.existsSync()) {
       return FileImage(_localImageFile!);
     }
+    
+    // Check for base64 image in user profile (Database source)
+    final user = context.read<AuthService>().currentUser;
+    final base64Image = user?['profile']?['avatarBase64'] ?? user?['avatarBase64'];
+    if (base64Image != null && base64Image.toString().isNotEmpty) {
+      try {
+        return MemoryImage(base64Decode(base64Image.toString()));
+      } catch (e) {
+        developer.log('Error decoding base64 avatar: $e');
+      }
+    }
+
     if (_imageUrl != null && _imageUrl!.isNotEmpty) {
       return NetworkImage(_imageUrl!);
     }
@@ -227,12 +297,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Icon(icon, size: 20, color: isActive ? AppColors.indigo600 : AppColors.slate500),
               const SizedBox(width: 12),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  color: isActive ? AppColors.indigo600 : AppColors.slate600,
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    color: isActive ? AppColors.indigo600 : AppColors.slate600,
+                  ),
                 ),
               ),
             ],
@@ -244,115 +318,120 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = AuthService().currentUser;
-    final String email = user?['email'] ?? 'Unknown';
-    final String name = _nameCtrl.text.isNotEmpty ? _nameCtrl.text : 'Google User';
+    return Consumer<AuthService>(
+      builder: (context, auth, _) {
+        final user = auth.currentUser;
+        
+        // Mandatory Logging Requirement
+        developer.log('🖼️ UI RENDER: ProfileScreen build cycle. Bio in state: ${user?['profile']?['bio']}');
+        
+        final String email = user?['auth']?['email'] ?? user?['email'] ?? 'Unknown';
+        final String name = user?['profile']?['name'] ?? user?['name'] ?? 'User';
+        final String bio = user?['profile']?['bio'] ?? user?['bio'] ?? '';
+        final settingsNotifier = Provider.of<SettingsNotifier>(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.slate50,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Page Header
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Profile & Settings',
-                  style: GoogleFonts.inter(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.slate900,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // Profile Summary Card
-            _buildProfileSummaryCard(user, name, email),
-
-            const SizedBox(height: 32),
-
-            // Divided Content
-            Row(
+        return Scaffold(
+          backgroundColor: AppColors.slate50,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Vertical Navigation Sidebar
-                SizedBox(
-                  width: 260,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSidebarItem(Icons.person_outline_rounded, 'Personal Information', ProfileSection.personalInfo),
-                      _buildSidebarItem(Icons.settings_outlined, 'Account Settings', ProfileSection.accountSettings),
-                      _buildSidebarItem(Icons.lock_outline_rounded, 'Security', ProfileSection.security),
-                      _buildSidebarItem(Icons.work_outline_rounded, 'Workspaces & Communities', ProfileSection.workspaces),
-                      _buildSidebarItem(Icons.notifications_none_rounded, 'Notifications', ProfileSection.notifications),
-                      _buildSidebarItem(Icons.credit_card_rounded, 'Billing / Subscription', ProfileSection.billing),
-                      _buildSidebarItem(Icons.history_rounded, 'Activity History', ProfileSection.activity),
-                      _buildSidebarItem(Icons.extension_outlined, 'Connected Integrations', ProfileSection.integrations),
-                      const SizedBox(height: 32),
-                      GestureDetector(
-                        onTap: () async {
-                           await AuthService().logout();
-                           if (context.mounted) {
-                             Navigator.of(context).pushAndRemoveUntil(
-                               MaterialPageRoute(builder: (context) => const AuthScreen()),
-                               (Route<dynamic> route) => false
-                             );
-                           }
-                        },
-                        child: MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: AppColors.rose50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: AppColors.rose100),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.logout_rounded, size: 20, color: AppColors.rose600),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Log Out',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.rose600,
-                                  ),
+                // Page Header
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Profile & Settings',
+                      style: GoogleFonts.inter(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.slate900,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 24),
+
+                // Profile Summary Card
+                _buildProfileSummaryCard(user, name, bio, email),
+
+                const SizedBox(height: 32),
+
+                // Divided Content
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Vertical Navigation Sidebar
+                    SizedBox(
+                      width: 260,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSidebarItem(Icons.person_outline_rounded, 'Personal Information', ProfileSection.personalInfo),
+                          _buildSidebarItem(Icons.settings_outlined, 'Account Settings', ProfileSection.accountSettings),
+                          _buildSidebarItem(Icons.lock_outline_rounded, 'Security', ProfileSection.security),
+                          const SizedBox(height: 32),
+                          GestureDetector(
+                            onTap: () async {
+                               await AuthService().logout();
+                               if (context.mounted) {
+                                 Navigator.of(context).pushAndRemoveUntil(
+                                   MaterialPageRoute(builder: (context) => const AuthScreen()),
+                                   (Route<dynamic> route) => false
+                                 );
+                               }
+                            },
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.rose50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.rose100),
                                 ),
-                              ],
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.logout_rounded, size: 20, color: AppColors.rose600),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      'Log Out',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.rose600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 48),
-
-                // Main Content Area
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.slate200),
                     ),
-                    child: _buildSectionContent(),
-                  ),
+                    const SizedBox(width: 48),
+
+                    // Main Content Area
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.slate200),
+                        ),
+                        child: _buildSectionContent(),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -364,14 +443,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return _buildAccountSettingsSection();
       case ProfileSection.security:
         return _buildSecuritySection();
-      case ProfileSection.workspaces:
-        return _buildWorkspacesSection();
       default:
         return _buildPlaceholderSection('Section', 'This section is currently under development.');
     }
   }
 
   Widget _buildAccountSettingsSection() {
+    final l10n = AppLocalizations.of(context)!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -381,12 +459,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Account Settings',
+                l10n.accountSettings,
                 style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.slate900),
               ),
               const SizedBox(height: 4),
               Text(
-                'Manage your account preferences, language, and regional settings.',
+                l10n.accountSettingsDesc,
                 style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate500),
               ),
             ],
@@ -397,11 +475,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              _buildSettingRow(Icons.language_rounded, 'Language', 'English (US)'),
+              _buildSettingRow(
+                Icons.language_rounded, 
+                l10n.language, 
+                settingsNotifier.locale.languageCode == 'en' ? 'English (US)' : 'Español',
+                onTap: () => _showLanguagePicker(),
+              ),
               const SizedBox(height: 24),
-              _buildSettingRow(Icons.public_rounded, 'Timezone', '(GMT-08:00) Pacific Time'),
+              _buildSettingRow(
+                Icons.public_rounded, 
+                l10n.timezone, 
+                '(GMT+05:30) India Standard Time',
+                onTap: () {},
+              ),
               const SizedBox(height: 24),
-              _buildSettingRow(Icons.calendar_today_rounded, 'Week Start', 'Monday'),
+              _buildSettingRow(
+                Icons.calendar_today_rounded, 
+                l10n.weekStart, 
+                settingsNotifier.firstDayOfWeek == 1 ? l10n.monday : l10n.sunday,
+                onTap: () => _showWeekStartPicker(),
+              ),
               const SizedBox(height: 32),
               const Divider(color: AppColors.slate100),
               const SizedBox(height: 32),
@@ -411,18 +504,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Delete Account', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.rose600)),
+                      Text(l10n.deleteAccount, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.rose600)),
                       const SizedBox(height: 4),
-                      Text('Permanently remove your account and all data.', style: GoogleFonts.inter(fontSize: 13, color: AppColors.slate500)),
+                      Text(l10n.deleteAccountDesc, style: GoogleFonts.inter(fontSize: 13, color: AppColors.slate500)),
                     ],
                   ),
                   OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () => _showDeleteAccountConfirmation(),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.rose600,
                       side: const BorderSide(color: AppColors.rose200),
                     ),
-                    child: const Text('Delete'),
+                    child: Text(l10n.delete),
                   ),
                 ],
               ),
@@ -430,141 +523,1008 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showDeleteAccountConfirmation() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Explicit colors for a "Bright, Clean" Slate look (even if app is in dark mode if needed)
+    // But aligning with "bright mode" request usually means light theme defaults
+    final Color titleColor = AppColors.slate900;
+    final Color subtitleColor = AppColors.slate700;
+    final Color bodyColor = AppColors.slate500;
+    final Color dialogBg = Colors.white;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: dialogBg,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 100), // Narrower width
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.rose500, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                'Delete Account',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700, 
+                  color: titleColor,
+                  fontSize: 18
+                ),
+              ),
+            ],
+          ),
+          content: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Are you absolutely sure?',
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600, 
+                    color: subtitleColor,
+                    fontSize: 14
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This action is total and irreversible. All your progress, goals, and personal settings will be purged from our servers forever.',
+                  style: GoogleFonts.inter(
+                    color: bodyColor, 
+                    fontSize: 13,
+                    height: 1.6
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              ),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(
+                  color: isDark ? AppColors.slate300 : AppColors.slate500, 
+                  fontWeight: FontWeight.w600
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+                
+                // Show loading indicator
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Deleting account...'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+
+                final bool success = await AuthService().deleteAccount();
+                
+                if (success) {
+                  if (mounted) {
+                    // Navigate to AuthScreen and clear the entire navigation stack
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (context) => const AuthScreen()),
+                      (route) => false,
+                    );
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Failed to delete account. Please try again later.'),
+                        backgroundColor: AppColors.rose600,
+                      ),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.rose600,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: Text(
+                'Delete Permanently',
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showLanguagePicker() {
+    _showModernPicker(
+      title: AppLocalizations.of(context)!.language,
+      icon: Icons.translate_rounded,
+      options: [
+        _PickerOption(label: 'English (US)', value: 'en', isActive: settingsNotifier.locale.languageCode == 'en'),
+        _PickerOption(label: 'Español', value: 'es', isActive: settingsNotifier.locale.languageCode == 'es'),
+      ],
+      onSelect: (value) => settingsNotifier.setLocale(Locale(value as String)),
+    );
+  }
+
+  void _showWeekStartPicker() {
+    final l10n = AppLocalizations.of(context)!;
+    _showModernPicker(
+      title: l10n.weekStart,
+      icon: Icons.calendar_month_rounded,
+      options: [
+        _PickerOption(label: l10n.monday, value: 1, isActive: settingsNotifier.firstDayOfWeek == 1),
+        _PickerOption(label: l10n.sunday, value: 7, isActive: settingsNotifier.firstDayOfWeek == 7),
+      ],
+      onSelect: (value) => settingsNotifier.setFirstDayOfWeek(value as int),
+    );
+  }
+
+  void _showModernPicker({
+    required String title,
+    required IconData icon,
+    required List<_PickerOption> options,
+    required Function(dynamic) onSelect,
+  }) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: title,
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 250),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return ScaleTransition(
+          scale: CurvedAnimation(parent: anim1, curve: Curves.easeOutBack),
+          child: FadeTransition(opacity: anim1, child: child),
+        );
+      },
+      pageBuilder: (context, anim1, anim2) {
+        return Center(
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              width: 380,
+              margin: const EdgeInsets.symmetric(horizontal: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.indigo500.withOpacity(0.12),
+                    blurRadius: 40,
+                    offset: const Offset(0, 20),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(32, 32, 32, 24),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.indigo50.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(icon, color: AppColors.indigo600, size: 24),
+                        ),
+                        const SizedBox(width: 20),
+                        Text(
+                          title,
+                          style: GoogleFonts.inter(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.slate900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.slate100),
+                  // Options
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: options.map((opt) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: InkWell(
+                            onTap: () {
+                              onSelect(opt.value);
+                              Navigator.pop(context);
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                              decoration: BoxDecoration(
+                                color: opt.isActive ? AppColors.indigo50.withOpacity(0.3) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: opt.isActive ? AppColors.indigo200.withOpacity(0.5) : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      opt.label,
+                                      style: GoogleFonts.inter(
+                                        fontSize: 16,
+                                        fontWeight: opt.isActive ? FontWeight.w600 : FontWeight.w500,
+                                        color: opt.isActive ? AppColors.indigo600 : AppColors.slate700,
+                                      ),
+                                    ),
+                                  ),
+                                  if (opt.isActive)
+                                    const Icon(Icons.check_circle_rounded, color: AppColors.indigo600, size: 22)
+                                  else
+                                    Container(
+                                      height: 22,
+                                      width: 22,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: AppColors.slate300, width: 1.5),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildSecuritySection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Security',
-                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.slate900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Control your password and account access security.',
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate500),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1, color: AppColors.slate200),
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              _buildSecurityOption(
-                Icons.password_rounded,
-                'Change Password',
-                'Last changed 3 months ago',
-                'Update',
-              ),
-              const SizedBox(height: 24),
-              _buildSecurityOption(
-                Icons.phonelink_lock_rounded,
-                'Two-Factor Authentication',
-                'Add an extra layer of security to your account',
-                'Setup',
-                isEnabled: false,
-              ),
-              const SizedBox(height: 24),
-              _buildSecurityOption(
-                Icons.devices_rounded,
-                'Logged-in Devices',
-                'Manage your active sessions on different devices',
-                'Manage',
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+    return ListenableBuilder(
+      listenable: AuthService(),
+      builder: (context, _) {
+        final user = AuthService().currentUser;
+        final is2faEnabled = user?['security']?['twoFactorEnabled'] ?? false;
 
-  Widget _buildWorkspacesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Workspaces & Communities',
-                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.slate900),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Manage the workspaces and communities you belong to.',
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate500),
-              ),
-            ],
-          ),
-        ),
-        const Divider(height: 1, color: AppColors.slate200),
-        Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Your Workspaces', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate700)),
-              const SizedBox(height: 16),
-              _buildWorkspaceItem('Personal Workspace', 'Default', true),
-              const SizedBox(height: 12),
-              _buildWorkspaceItem('Development Team', 'Shared', false),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Active Communities', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate700)),
-                  TextButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Create New'),
+                  Text(
+                    'Security',
+                    style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.slate900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Control your password and account access security.',
+                    style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate500),
                   ),
                 ],
               ),
+            ),
+            const Divider(height: 1, color: AppColors.slate200),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Builder(
+                    builder: (context) {
+                      final lastChanged = user?['lastPasswordChange'];
+                      String subtitle = 'Update your account password regularly';
+                      if (lastChanged != null) {
+                        try {
+                          final dt = DateTime.parse(lastChanged);
+                          subtitle = 'Last changed: ${DateFormat.yMMMd().format(dt)}';
+                        } catch (_) {}
+                      }
+                      return _buildSecurityOption(
+                        Icons.password_rounded,
+                        'Change Password',
+                        subtitle,
+                        'Update',
+                        onPressed: _showChangePasswordDialog,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSecurityOption(
+                    Icons.phonelink_lock_rounded,
+                    'Two-Factor Authentication',
+                    is2faEnabled ? 'Currently enabled for your account' : 'Add an extra layer of security to your account',
+                    is2faEnabled ? 'Disable' : 'Setup',
+                    onPressed: is2faEnabled ? _confirmDisable2fa : _show2faSetupDialog,
+                    buttonColor: is2faEnabled ? AppColors.rose600 : AppColors.indigo600,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSecurityOption(
+                    Icons.devices_rounded,
+                    'Logged-in Devices',
+                    'Manage your active sessions on different devices',
+                    'Manage',
+                    onPressed: _showDeviceManagementDialog,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+    );
+  }
+
+  void _showChangePasswordDialog() {
+    final currentPasswordCtrl = TextEditingController();
+    final newPasswordCtrl = TextEditingController();
+    final confirmPasswordCtrl = TextEditingController();
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => _buildModernDialog(
+          icon: Icons.password_rounded,
+          title: 'Change Password',
+          subtitle: 'Secure your account with a strong password',
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildModernTextField(
+                controller: currentPasswordCtrl,
+                label: 'Current Password',
+                obscureText: true,
+                icon: Icons.lock_open_rounded,
+              ),
               const SizedBox(height: 16),
-              _buildCommunityItem('Flutter Enthusiasts', '2.4k Members'),
-              const SizedBox(height: 12),
-              _buildCommunityItem('Product Design Hub', '850 Members'),
+              _buildModernTextField(
+                controller: newPasswordCtrl,
+                label: 'New Password',
+                obscureText: true,
+                icon: Icons.lock_outline_rounded,
+              ),
+              const SizedBox(height: 16),
+              _buildModernTextField(
+                controller: confirmPasswordCtrl,
+                label: 'Confirm New Password',
+                obscureText: true,
+                icon: Icons.lock_reset_rounded,
+              ),
             ],
+          ),
+          actions: [
+            _buildModernSecondaryButton('Cancel', () => Navigator.pop(context)),
+            const SizedBox(width: 12),
+            _buildModernPrimaryButton(
+              'Update',
+              isLoading,
+              () async {
+                if (newPasswordCtrl.text != confirmPasswordCtrl.text) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+                  return;
+                }
+                setState(() => isLoading = true);
+                try {
+                  await SecurityService().changePassword(currentPasswordCtrl.text, newPasswordCtrl.text);
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password updated successfully')));
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+                } finally {
+                  setState(() => isLoading = false);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _show2faSetupDialog() async {
+    String? secret;
+    String? qrData;
+    
+    try {
+      secret = await SecurityService().setup2fa();
+      final email = AuthService().currentUser?['email'] ?? '';
+      qrData = SecurityService().getQrCodeData(email, secret);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error starting 2FA setup: $e')));
+      }
+      return;
+    }
+
+    final otpCtrl = TextEditingController();
+    bool step2 = false;
+    bool isLoading = false;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => _buildModernDialog(
+          icon: Icons.phonelink_lock_rounded,
+          title: 'Setup 2FA',
+          subtitle: step2 ? 'Verify your device' : 'Scan the QR code',
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!step2) ...[
+                  Text(
+                    'Scan this QR code with your Authenticator app (Google Authenticator, Authy, etc.)',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate600),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.slate100),
+                    ),
+                    child: QrImageView(
+                      data: qrData!,
+                      version: QrVersions.auto,
+                      size: 200.0,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text('Manual Key:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(color: AppColors.slate50, borderRadius: BorderRadius.circular(8)),
+                    child: SelectableText(secret!, style: GoogleFonts.inter(fontWeight: FontWeight.bold, letterSpacing: 1.2, color: AppColors.indigo600)),
+                  ),
+                ] else ...[
+                  Text(
+                    'Enter the 6-digit code from your app to verify the setup.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate600),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 200,
+                    child: _buildModernTextField(
+                      controller: otpCtrl,
+                      label: '6-Digit Code',
+                      icon: Icons.numbers_rounded,
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            _buildModernSecondaryButton('Cancel', () => Navigator.pop(context)),
+            const SizedBox(width: 12),
+            _buildModernPrimaryButton(
+              step2 ? 'Verify & Enable' : 'Next',
+              isLoading,
+              () async {
+                if (!step2) {
+                  setStateDialog(() => step2 = true);
+                } else {
+                  setStateDialog(() => isLoading = true);
+                  try {
+                    final isValid = await SecurityService().verifySetupStep(otpCtrl.text);
+                    if (isValid) {
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        setState(() {}); // Force rebuild to update button
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('2FA enabled successfully')));
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP code')));
+                      }
+                      setStateDialog(() => isLoading = false);
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Verification error: $e')));
+                    }
+                    setStateDialog(() => isLoading = false);
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDisable2fa() async {
+    final user = AuthService().currentUser;
+    if (user == null) return;
+
+    final db = MongoDBService().db;
+    if (db == null) return;
+
+    final profilesCol = db.collection(DB.userProfiles);
+    final profile = await profilesCol.findOne(where.eq('userId', user['email']));
+    final secret = profile?['security']?['twoFactorSecret'] ?? '';
+    final qrData = SecurityService().getQrCodeData(user['email'], secret);
+
+    final otpCtrl = TextEditingController();
+    bool isLoading = false;
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => _buildModernDialog(
+          icon: Icons.no_encryption_gmailerrorred_rounded,
+          title: 'Disable 2FA',
+          subtitle: 'Verify the QR code to disable 2FA',
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Scan the QR code and enter the 6-digit code to disable two-factor authentication.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate600),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.slate100),
+                  ),
+                  child: QrImageView(
+                    data: qrData,
+                    version: QrVersions.auto,
+                    size: 180.0,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: 200,
+                  child: _buildModernTextField(
+                    controller: otpCtrl,
+                    label: '6-Digit Code',
+                    icon: Icons.numbers_rounded,
+                    keyboardType: TextInputType.number,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            _buildModernSecondaryButton('Cancel', () => Navigator.pop(context)),
+            const SizedBox(width: 12),
+            _buildModernPrimaryButton(
+              'Verify & Disable',
+              isLoading,
+              () async {
+                setStateDialog(() => isLoading = true);
+                try {
+                  final success = await SecurityService().disable2fa(otpCtrl.text);
+                  if (success) {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      this.setState(() {}); // Update the main profile screen UI
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('2FA disabled successfully')));
+                    }
+                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid OTP code')));
+                    }
+                    setStateDialog(() => isLoading = false);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                  setStateDialog(() => isLoading = false);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<bool> _verifyCurrentPassword(String password) async {
+    final user = AuthService().currentUser;
+    if (user == null) return false;
+    final db = MongoDBService().db;
+    if (db == null) return false;
+    
+    // Hash the password and check DB
+    final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+    final collection = db.collection('users');
+    final dbUser = await collection.findOne(where.eq('email', user['email']));
+    return dbUser != null && dbUser['passwordHash'] == hashedPassword;
+  }
+
+  void _showDeviceManagementDialog() async {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => _buildModernDialog(
+          icon: Icons.devices_rounded,
+          title: 'Active Sessions',
+          subtitle: 'Devices logged into your account',
+          content: Container(
+            constraints: const BoxConstraints(maxHeight: 450, maxWidth: 500),
+            width: double.maxFinite,
+            child: FutureBuilder<List<UserSession>>(
+              future: SecurityService().getActiveSessions(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final sessions = snapshot.data!;
+                
+                if (sessions.isEmpty) {
+                   return Center(
+                     child: Padding(
+                       padding: const EdgeInsets.symmetric(vertical: 32),
+                       child: Column(
+                         mainAxisSize: MainAxisSize.min,
+                         children: [
+                           Icon(Icons.devices_rounded, size: 48, color: AppColors.slate300),
+                           const SizedBox(height: 16),
+                           Text('No active sessions found', style: GoogleFonts.inter(color: AppColors.slate500)),
+                         ],
+                       ),
+                     ),
+                   );
+                }
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: sessions.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final session = sessions[index];
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: session.isCurrent ? AppColors.emerald50.withOpacity(0.5) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(16),
+                              border: session.isCurrent ? Border.all(color: AppColors.emerald200, width: 1.5) : Border.all(color: AppColors.slate100),
+                            ),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              leading: Stack(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: session.isCurrent ? AppColors.emerald100 : AppColors.slate50,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      session.deviceType == 'Mobile' ? Icons.smartphone_rounded : Icons.desktop_windows_rounded,
+                                      color: session.isCurrent ? AppColors.emerald600 : AppColors.slate500,
+                                      size: 20,
+                                    ),
+                                  ),
+                                  if (session.isCurrent)
+                                    Positioned(
+                                      right: 0,
+                                      bottom: 0,
+                                      child: Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.emerald500,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: Colors.white, width: 2),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              title: Row(
+                                children: [
+                                  Text(
+                                    session.deviceName,
+                                    style: GoogleFonts.inter(fontSize: 14, fontWeight: session.isCurrent ? FontWeight.bold : FontWeight.w500, color: AppColors.slate900),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Role Bit / Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.indigo50, 
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: AppColors.indigo100)
+                                    ),
+                                    child: Text(
+                                      (context.read<AuthService>().currentUser?['role'] ?? 'USER').toString().toUpperCase(), 
+                                      style: GoogleFonts.inter(color: AppColors.indigo600, fontSize: 8, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                  if (session.isCurrent) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(color: AppColors.emerald500, borderRadius: BorderRadius.circular(12)),
+                                      child: Text('THIS DEVICE', style: GoogleFonts.inter(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${session.osInfo} • ${session.ipAddress ?? '127.0.0.1'}',
+                                    style: GoogleFonts.inter(fontSize: 12, color: AppColors.slate500),
+                                  ),
+                                  if (session.isCurrent)
+                                    Text(
+                                      'Active Now (This Device)',
+                                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.emerald600, fontWeight: FontWeight.w600),
+                                    )
+                                  else
+                                    Text(
+                                      'Last active: ${DateFormat.yMMMd().add_Hm().format(session.lastActive.toLocal())}',
+                                      style: GoogleFonts.inter(fontSize: 11, color: AppColors.slate400),
+                                    ),
+                                ],
+                              ),
+                              trailing: IconButton(
+                                icon: Icon(Icons.logout_rounded, color: session.isCurrent ? AppColors.slate300 : AppColors.rose500, size: 20),
+                                onPressed: () async {
+                                  if (session.isCurrent) {
+                                    final confirm = await _showCurrentDeviceLogoutWarning();
+                                    if (confirm != true) return;
+                                    
+                                    await SecurityService().revokeSession(session.id);
+                                    if (context.mounted) {
+                                      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                                        MaterialPageRoute(builder: (context) => const AuthScreen()),
+                                        (route) => false,
+                                      );
+                                    }
+                                  } else {
+                                    await SecurityService().revokeSession(session.id);
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (sessions.length > 1) ...[
+                      const Divider(height: 1, color: AppColors.slate100),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          _buildModernSecondaryButton(
+                            'Log out other devices', 
+                            () async {
+                              await SecurityService().revokeAllOtherSessions();
+                              setState(() {});
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Logged out from all other devices')));
+                              }
+                            },
+                          ),
+                          const Spacer(),
+                          _buildModernSecondaryButton('Close', () => Navigator.pop(context)),
+                        ],
+                      ),
+                    ] else ...[
+                       const SizedBox(height: 16),
+                       Align(
+                         alignment: Alignment.centerRight,
+                         child: _buildModernSecondaryButton('Close', () => Navigator.pop(context)),
+                       ),
+                    ],
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- UI Helpers for Security Dialogs ---
+
+  Widget _buildModernDialog({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Widget content,
+    List<Widget>? actions,
+  }) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Container(
+        width: 420,
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(28),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: AppColors.indigo50, borderRadius: BorderRadius.circular(16)),
+                  child: Icon(icon, color: AppColors.indigo600, size: 28),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: GoogleFonts.inter(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.slate900)),
+                      Text(subtitle, style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate500)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+            content,
+            if (actions != null) ...[
+              const SizedBox(height: 32),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    bool obscureText = false,
+    TextInputType keyboardType = TextInputType.text,
+    TextAlign textAlign = TextAlign.start,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.slate500)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          textAlign: textAlign,
+          style: GoogleFonts.inter(fontSize: 15, color: AppColors.slate900, fontWeight: FontWeight.w500),
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, size: 20, color: AppColors.slate400),
+            filled: true,
+            fillColor: AppColors.slate50,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: AppColors.indigo500, width: 1.5)),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSettingRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: AppColors.slate50, borderRadius: BorderRadius.circular(8)),
-          child: Icon(icon, size: 20, color: AppColors.slate600),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: GoogleFonts.inter(fontSize: 13, color: AppColors.slate500)),
-            Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate900)),
-          ],
-        ),
-        const Spacer(),
-        const Icon(Icons.chevron_right_rounded, color: AppColors.slate300),
-      ],
+  Widget _buildModernPrimaryButton(String label, bool isLoading, VoidCallback? onTap) {
+    return ElevatedButton(
+      onPressed: isLoading ? null : onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppColors.indigo600,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      child: isLoading 
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white))) 
+        : Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
     );
   }
 
-  Widget _buildSecurityOption(IconData icon, String title, String subtitle, String action, {bool isEnabled = true}) {
+  Widget _buildModernSecondaryButton(String label, VoidCallback? onTap) {
+    return TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.slate600,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      child: Text(label, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
+    );
+  }
+
+  Widget _buildSettingRow(IconData icon, String label, String value, {VoidCallback? onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: AppColors.slate50, borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, size: 20, color: AppColors.slate600),
+            ),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: GoogleFonts.inter(fontSize: 13, color: AppColors.slate500)),
+                Text(value, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.slate900)),
+              ],
+            ),
+            const Spacer(),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.slate300),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSecurityOption(IconData icon, String title, String subtitle, String action, {VoidCallback? onPressed, bool isEnabled = true, Color? buttonColor}) {
     return Row(
       children: [
         Container(
@@ -583,83 +1543,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         const SizedBox(width: 16),
-        TextButton(
-          onPressed: () {},
-          child: Text(action, style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+        ElevatedButton(
+          onPressed: isEnabled ? onPressed : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: buttonColor ?? AppColors.indigo600,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: Text(action, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600)),
         ),
       ],
     );
   }
 
-  Widget _buildWorkspaceItem(String name, String type, bool isCurrent) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isCurrent ? AppColors.indigo50.withOpacity(0.5) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isCurrent ? AppColors.indigo200 : AppColors.slate200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(color: isCurrent ? AppColors.indigo600 : AppColors.slate100, borderRadius: BorderRadius.circular(8)),
-            child: Icon(isCurrent ? Icons.check : Icons.work_outline, color: isCurrent ? Colors.white : AppColors.slate500, size: 20),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate900)),
-                Text(type, style: GoogleFonts.inter(fontSize: 12, color: AppColors.slate500)),
-              ],
-            ),
-          ),
-          if (!isCurrent)
-            OutlinedButton(
-              onPressed: () {},
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                side: const BorderSide(color: AppColors.slate200),
-              ),
-              child: const Text('Switch'),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCommunityItem(String name, String members) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.slate200),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            backgroundColor: AppColors.slate100,
-            child: Text(name[0], style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppColors.slate600)),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(name, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.slate900)),
-                Text(members, style: GoogleFonts.inter(fontSize: 12, color: AppColors.slate500)),
-              ],
-            ),
-          ),
-          const Icon(Icons.more_vert_rounded, color: AppColors.slate400),
-        ],
-      ),
-    );
-  }
 
   Widget _buildPersonalInformationSection() {
     return Column(
@@ -697,7 +1595,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               _buildFormRow('Full Name', _nameCtrl),
               const SizedBox(height: 24),
-              _buildFormRow('Email Address', _emailCtrl),
+              _buildFormRow('Email Address', _emailCtrl, isReadOnly: true),
               const SizedBox(height: 24),
               _buildFormRow('Biography', _bioCtrl, maxLines: 3),
             ],
@@ -769,10 +1667,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ElevatedButton(
                   onPressed: () async {
                     if (_selectedTheme == 'Dark Mode') {
-                      themeNotifier.setTheme(ThemeMode.dark);
+                      settingsNotifier.setTheme(ThemeMode.dark);
                     } else {
-                      themeNotifier.setTheme(ThemeMode.light);
+                      settingsNotifier.setTheme(ThemeMode.light);
                     }
+                    // Determine the photo to save to database as base64
+                    String? base64Avatar;
+                    if (_localImageFile != null && _localImageFile!.existsSync()) {
+                      try {
+                        final bytes = await _localImageFile!.readAsBytes();
+                        img.Image? decoded = img.decodeImage(bytes);
+                        if (decoded != null) {
+                          // Resize for efficiency (e.g. 256x256)
+                          img.Image resized = img.copyResize(decoded, width: 256, height: 256);
+                          base64Avatar = base64Encode(img.encodeJpg(resized, quality: 85));
+                        }
+                      } catch (e) {
+                         developer.log('Error processing profile image for upload: $e');
+                      }
+                    }
+
                     await AuthService().updateProfile(
                       name: _nameCtrl.text.trim(),
                       email: _emailCtrl.text.trim(),
@@ -780,9 +1694,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       imageUrl: _imageUrl,
                       rotation: _rotation,
                       localImagePath: _localImageFile?.path,
+                      avatarBase64: base64Avatar,
                     );
                     
-                    setState(() => _isEditing = false);
+                    // After saving, clear local file buffer to prioritize database-synced image
+                    setState(() {
+                      _isEditing = false;
+                      _localImageFile = null;
+                    });
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Settings saved successfully'), backgroundColor: AppColors.indigo600),
@@ -859,7 +1778,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildProfileSummaryCard(Map<String, dynamic>? user, String name, String email) {
+  Widget _buildProfileSummaryCard(Map<String, dynamic>? user, String name, String bio, String email) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(32),
@@ -943,11 +1862,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _bioCtrl.text,
+                  bio.isNotEmpty ? bio : 'Add a short bio about yourself',
                   style: GoogleFonts.inter(
                     fontSize: 16,
-                    color: AppColors.slate500,
-                    fontWeight: FontWeight.w500,
+                    color: bio.isNotEmpty ? AppColors.slate500 : AppColors.slate400,
+                    fontWeight: bio.isNotEmpty ? FontWeight.w500 : FontWeight.w400,
+                    fontStyle: bio.isNotEmpty ? FontStyle.normal : FontStyle.italic,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -1103,6 +2023,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<bool?> _showCurrentDeviceLogoutWarning() {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => _buildModernDialog(
+        icon: Icons.warning_amber_rounded,
+        title: 'Logout Current Device?',
+        subtitle: 'You are about to log out from this device.',
+        content: Text(
+          'You will be redirected to the login screen and need to sign in again to access your account.',
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.slate600),
+        ),
+        actions: [
+          _buildModernSecondaryButton('Cancel', () => Navigator.pop(context, false)),
+          const SizedBox(width: 12),
+          _buildModernPrimaryButton('Yes, Log Out', false, () => Navigator.pop(context, true)),
+        ],
       ),
     );
   }

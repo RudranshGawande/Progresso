@@ -9,6 +9,7 @@ import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'package:progresso/services/security_service.dart';
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -511,6 +512,11 @@ class _LoginFormState extends State<LoginForm> {
   bool _obscurePass = true;
   bool _isLoading = false;
   String? _errorMessage;
+  
+  // 2FA state
+  bool _show2FA = false;
+  Map<String, dynamic>? _pendingUser;
+  final _otpCtrl = TextEditingController();
 
   @override
   void dispose() {
@@ -521,20 +527,27 @@ class _LoginFormState extends State<LoginForm> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    
     try {
-      final user = await AuthService().login(
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+      final response = await AuthService().login(
         _emailCtrl.text,
         _passCtrl.text,
       );
       
       if (!mounted) return;
 
-      if (user != null) {
+      if (response != null) {
+        if (response is Map && response['2fa_required'] == true) {
+          setState(() {
+            _show2FA = true;
+            _pendingUser = response as Map<String, dynamic>;
+            _isLoading = false;
+          });
+          return;
+        }
         widget.onAuthSuccess();
       } else {
         setState(() {
@@ -596,8 +609,18 @@ class _LoginFormState extends State<LoginForm> {
       }
 
       if (email != null) {
-        await AuthService().handleGoogleSignIn(name ?? 'User', email);
+        final response = await AuthService().handleGoogleSignIn(name ?? 'User', email);
         if (!mounted) return;
+
+        if (response['2fa_required'] == true) {
+          setState(() {
+            _show2FA = true;
+            _pendingUser = response;
+            _isLoading = false;
+          });
+          return;
+        }
+        
         widget.onAuthSuccess();
       } else {
         setState(() {
@@ -616,8 +639,67 @@ class _LoginFormState extends State<LoginForm> {
 
   void _googleSignIn() => _handleGoogleAuth();
 
+  Future<void> _verifyOTP() async {
+    if (_otpCtrl.text.length != 6) return;
+    setState(() => _isLoading = true);
+    
+    final secret = _pendingUser?['2faSecret'];
+    final isValid = SecurityService().verifyOTP(secret, _otpCtrl.text);
+    
+    if (isValid) {
+      await AuthService().complete2faLogin(_pendingUser!);
+      widget.onAuthSuccess();
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Invalid OTP code';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_show2FA) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: () => setState(() => _show2FA = false),
+            icon: const Icon(Icons.arrow_back),
+            padding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Two-Factor Verification',
+            style: GoogleFonts.inter(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.slate900),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Enter the 6-digit code from your authenticator app.',
+            style: GoogleFonts.inter(fontSize: 15, color: AppColors.slate500),
+          ),
+          const SizedBox(height: 32),
+          if (_errorMessage != null) ...[
+            _ErrorBanner(message: _errorMessage!),
+            const SizedBox(height: 16),
+          ],
+          _AuthTextField(
+            controller: _otpCtrl,
+            hint: '000000',
+            keyboardType: TextInputType.number,
+            prefixIcon: Icons.security_rounded,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          _PrimaryButton(
+            label: 'Verify & Login',
+            isLoading: _isLoading,
+            onTap: _verifyOTP,
+          ),
+        ],
+      );
+    }
+
     return Form(
       key: _formKey,
       child: Column(
@@ -1066,8 +1148,9 @@ class _AuthTextField extends StatefulWidget {
   final Widget? suffixIcon;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
-  final TextInputAction? textInputAction;
+   final TextInputAction? textInputAction;
   final ValueChanged<String>? onFieldSubmitted;
+  final TextAlign textAlign;
 
   const _AuthTextField({
     required this.controller,
@@ -1079,6 +1162,7 @@ class _AuthTextField extends StatefulWidget {
     this.validator,
     this.textInputAction,
     this.onFieldSubmitted,
+    this.textAlign = TextAlign.start,
   });
 
   @override
@@ -1099,6 +1183,7 @@ class _AuthTextFieldState extends State<_AuthTextField> {
         validator: widget.validator,
         textInputAction: widget.textInputAction,
         onFieldSubmitted: widget.onFieldSubmitted,
+        textAlign: widget.textAlign,
         style: GoogleFonts.inter(
           fontSize: 14,
           color: AppColors.slate900,

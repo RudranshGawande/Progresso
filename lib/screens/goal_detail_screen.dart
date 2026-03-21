@@ -11,6 +11,9 @@ import '../services/goal_service.dart';
 import '../screens/focus_session_screen.dart';
 import '../widgets/session_type_selection_dialog.dart';
 import '../widgets/create_goal_dialog.dart';
+import '../theme/settings_notifier.dart';
+import 'package:progresso/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 enum _CalendarViewMode { days, months, years }
 enum TaskSortBy { closestFirst, furthestFirst, newestFirst, oldestFirst }
@@ -143,8 +146,9 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
     return ListenableBuilder(
-      listenable: Listenable.merge([SessionManager(), GoalService()]),
+      listenable: Listenable.merge([SessionManager(), GoalService(), settingsNotifier]),
       builder: (context, _) {
         return Column(
           children: [
@@ -2217,13 +2221,22 @@ class _ActivityItem extends StatelessWidget {
         icon = Icons.play_arrow;
         iconBg = Colors.blue;
         break;
+      case ActivityType.goalCreated:
+        icon = Icons.edit_note;
+        iconBg = AppColors.slate400;
+        break;
+      case ActivityType.taskCreated:
       case ActivityType.taskAdded:
         icon = Icons.add;
         iconBg = AppColors.blue500;
         break;
-      case ActivityType.goalCreated:
-        icon = Icons.edit_note;
-        iconBg = AppColors.slate400;
+      case ActivityType.taskDeleted:
+        icon = Icons.delete_outline;
+        iconBg = AppColors.rose500;
+        break;
+      case ActivityType.sessionStarted:
+        icon = Icons.play_arrow_outlined;
+        iconBg = Colors.green;
         break;
     }
 
@@ -2302,9 +2315,9 @@ class _AnalyticsCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Goal Analytics',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            AppLocalizations.of(context)!.goalAnalytics,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
           Row(
@@ -2386,18 +2399,48 @@ class _AnalyticsCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _SimpleBarChart(values: goal.dailyEffort),
+          _SimpleAnalyticsBarChart(values: goal.dailyEffort),
           const SizedBox(height: 8),
-          const Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Mon', style: TextStyle(fontSize: 11, color: AppColors.slate400)),
-              Text('Sun', style: TextStyle(fontSize: 11, color: AppColors.slate400)),
-            ],
-          ),
+          _BarLabels(),
         ],
       ),
     );
+  }
+}
+
+class _BarLabels extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
+    final int firstDay = settingsNotifier.firstDayOfWeek;
+    final List<String> shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(shortDays[(firstDay - 1) % 7], style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
+        Text(shortDays[(firstDay + 5) % 7], style: const TextStyle(fontSize: 11, color: AppColors.slate400)),
+      ],
+    );
+  }
+}
+
+class _SimpleAnalyticsBarChart extends StatelessWidget {
+  final List<double> values;
+  const _SimpleAnalyticsBarChart({required this.values});
+
+  @override
+  Widget build(BuildContext context) {
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
+    final int firstDay = settingsNotifier.firstDayOfWeek;
+    
+    // Reorder values based on firstDay
+    final List<double> orderedValues = [];
+    for (int i = 0; i < 7; i++) {
+       orderedValues.add(values[(firstDay - 1 + i) % 7]);
+    }
+
+    return _SimpleBarChart(values: orderedValues);
   }
 }
 

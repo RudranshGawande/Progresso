@@ -7,6 +7,9 @@ import 'package:progresso/widgets/responsive.dart';
 import 'package:progresso/models/goal_models.dart';
 import 'package:progresso/services/goal_service.dart';
 import 'package:progresso/widgets/custom_date_range_picker.dart';
+import 'package:progresso/theme/settings_notifier.dart';
+import 'package:progresso/l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
 
 class SessionWithMeta {
   final FocusSession session;
@@ -35,17 +38,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   Widget build(BuildContext context) {
     final bool isMobile = Responsive.isMobile(context);
     final bool isDesktop = Responsive.isDesktop(context);
+    final settingsNotifier = Provider.of<SettingsNotifier>(context);
 
     return ListenableBuilder(
-      listenable: GoalService(),
+      listenable: Listenable.merge([GoalService(), settingsNotifier]),
       builder: (context, _) {
         final allGoals = GoalService().goals;
+        final settingsNotifier = Provider.of<SettingsNotifier>(context);
         
-        final currentRange = _getCurrentRange();
+        final currentRange = _getCurrentRange(settingsNotifier);
         final prevRange = _getPreviousRange(currentRange);
 
-        final currentStats = _gatherPeriodStats(allGoals, currentRange, period: _selectedPeriod);
-        final prevStats = _gatherPeriodStats(allGoals, prevRange, period: _selectedPeriod);
+        final currentStats = _gatherPeriodStats(allGoals, currentRange, settingsNotifier, period: _selectedPeriod);
+        final prevStats = _gatherPeriodStats(allGoals, prevRange, settingsNotifier, period: _selectedPeriod);
         
         final periodSessions = currentStats.sessions;
         final totalHours = currentStats.totalHours;
@@ -71,9 +76,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   _buildHeader(context, isMobile),
                   const SizedBox(height: 48),
                   _buildSectionTitle(
-                    _selectedPeriod == 'Week' ? 'WEEKLY TOTALS' : 
-                    (_selectedPeriod == 'Month' ? 'MONTHLY TOTALS' : 
-                    (_selectedPeriod == 'Year' ? 'ANNUAL TOTALS' : 'DAILY OVERVIEW'))
+                    _selectedPeriod == 'Week' ? AppLocalizations.of(context)!.weeklyTotals.toUpperCase() : 
+                    (_selectedPeriod == 'Month' ? AppLocalizations.of(context)!.monthlyTotals.toUpperCase() : 
+                    (_selectedPeriod == 'Year' ? AppLocalizations.of(context)!.annualTotals.toUpperCase() : AppLocalizations.of(context)!.dailyOverview.toUpperCase()))
                   ),
                   const SizedBox(height: 16),
                   _buildDailyOverviewGrid(isMobile, currentStats, prevStats),
@@ -169,7 +174,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return results;
   }
 
-  _PeriodStats _gatherPeriodStats(List<Goal> goals, DateTimeRange range, {String? period}) {
+  _PeriodStats _gatherPeriodStats(List<Goal> goals, DateTimeRange range, SettingsNotifier settingsNotifier, {String? period}) {
     final start = range.start;
     final end = range.end;
 
@@ -200,13 +205,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       }
       chartLabels.addAll(['9 AM', '11 AM', '1 PM', '3 PM', '5 PM', 'NOW']);
     } else if (period == 'Week') {
+      final int firstDay = settingsNotifier.firstDayOfWeek;
+      final List<String> days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+      final List<String> orderedLabels = [];
+      for (int i = 0; i < 7; i++) {
+        orderedLabels.add(days[(firstDay - 1 + i) % 7]);
+      }
+      
       final List<double> dailyIntensity = List.filled(7, 0.0);
       for (var s in periodSessions) {
-        final dayIdx = (s.session.timestamp.weekday - 1) % 7;
+        // weekday is 1 for Mon, 7 for Sun.
+        // We want 0 for firstDay, 6 for lastDay.
+        final dayIdx = (s.session.timestamp.weekday - firstDay) % 7;
         dailyIntensity[dayIdx] = max(dailyIntensity[dayIdx], s.session.intensity);
       }
       chartData.addAll(dailyIntensity);
-      chartLabels.addAll(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']);
+      chartLabels.addAll(orderedLabels);
     } else if (period == 'Month') {
       chartLabels.addAll(['WEEK 1', 'WEEK 2', 'WEEK 3', 'WEEK 4', 'END']);
       for (int i = 0; i < 5; i++) {
@@ -251,15 +265,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  DateTimeRange _getCurrentRange() {
+  DateTimeRange _getCurrentRange(SettingsNotifier settingsNotifier) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     
     if (_selectedPeriod == 'Today') {
       return DateTimeRange(start: today, end: today.add(const Duration(days: 1)));
     } else if (_selectedPeriod == 'Week') {
-      // Find previous Monday (or today if today is Monday)
-      final start = today.subtract(Duration(days: today.weekday - 1));
+      // Find previous start of week based on settings
+      final int firstDay = settingsNotifier.firstDayOfWeek;
+      int daysToSubtract = (today.weekday - firstDay) % 7;
+      final start = today.subtract(Duration(days: daysToSubtract));
       return DateTimeRange(start: start, end: start.add(const Duration(days: 7)));
     } else if (_selectedPeriod == 'Month') {
       final start = DateTime(now.year, now.month, 1);
@@ -353,7 +369,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                    Text(
-                    'Performance Insights',
+                    AppLocalizations.of(context)!.performanceInsights,
                     style: GoogleFonts.inter(
                       fontSize: 32,
                       fontWeight: FontWeight.w900,
@@ -402,22 +418,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildPeriodButton('Today'),
-          _buildPeriodButton('Week'),
-          _buildPeriodButton('Month'),
-          _buildPeriodButton('Year'),
-          _buildPeriodButton('Custom', icon: Icons.calendar_today),
+          _buildPeriodButton('Today', AppLocalizations.of(context)!.today),
+          _buildPeriodButton('Week', AppLocalizations.of(context)!.week),
+          _buildPeriodButton('Month', AppLocalizations.of(context)!.month),
+          _buildPeriodButton('Year', AppLocalizations.of(context)!.year),
+          _buildPeriodButton('Custom', AppLocalizations.of(context)!.custom, icon: Icons.calendar_today),
         ],
       ),
     );
   }
 
-  Widget _buildPeriodButton(String label, {IconData? icon}) {
-    final bool isActive = _selectedPeriod == label;
+  Widget _buildPeriodButton(String key, String label, {IconData? icon}) {
+    final bool isActive = _selectedPeriod == key;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () async {
-        if (label == 'Custom') {
+        if (key == 'Custom') {
           final range = await showDialog<DateTimeRange>(
             context: context,
             barrierColor: AppColors.slate900.withOpacity(0.4),
@@ -434,7 +450,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             });
           }
         } else {
-          setState(() => _selectedPeriod = label);
+          setState(() => _selectedPeriod = key);
         }
       },
       child: Container(
@@ -492,12 +508,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       crossAxisCount: isMobile ? 1 : 4,
       crossAxisSpacing: 24,
       mainAxisSpacing: 24,
-      childAspectRatio: isMobile ? 2.8 : 1.6,
+      childAspectRatio: isMobile ? 1.7 : 1.15,
       children: [
         _buildStatCard(
           icon: Icons.schedule,
           iconColor: AppColors.primary,
-          label: 'Total Hours$periodLabel',
+          label: '${AppLocalizations.of(context)!.totalHours}$periodLabel',
           value: '${current.totalHours.toStringAsFixed(1)}h',
           trend: hoursTrend,
           isPositive: isHoursPositive,
@@ -505,7 +521,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _buildStatCard(
           icon: Icons.track_changes,
           iconColor: Colors.orange,
-          label: 'Focus Score$periodLabel',
+          label: '${AppLocalizations.of(context)!.focusScore}$periodLabel',
           value: '${current.avgFocusScore.toInt()}/100',
           trend: focusTrend,
           isPositive: isFocusPositive,
@@ -513,7 +529,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _buildStatCard(
           icon: Icons.timer,
           iconColor: AppColors.blue500,
-          label: 'Avg Session Length$periodLabel',
+          label: '${AppLocalizations.of(context)!.avgSessionLength}$periodLabel',
           value: current.avgSessionMinutes >= 60 
                   ? '${(current.avgSessionMinutes / 60).floor()}h ${(current.avgSessionMinutes % 60).round()}m' 
                   : '${current.avgSessionMinutes.toInt()} min',
@@ -523,7 +539,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         _buildStatCard(
           icon: Icons.done_all,
           iconColor: Colors.purple,
-          label: 'Tasks Completed$periodLabel',
+          label: '${AppLocalizations.of(context)!.tasksCompleted}$periodLabel',
           value: '${current.completedTasksCount}',
           trend: tasksTrend,
           isPositive: isTasksPositive,
@@ -542,7 +558,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     required bool isPositive,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(12),
@@ -602,6 +618,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           const SizedBox(height: 12),
           Text(
             label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: AppColors.slate500,
               fontSize: 13,
@@ -631,23 +649,25 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     String title = 'Daily Productivity Trends';
     String description = 'Daily focus time over the last week';
     String trendLabel = 'WEEK TREND';
-    String trendValue = 'Growth +8.4%';
+    String trendValue = '';
 
     if (_selectedPeriod == 'Today') {
-      title = 'Hourly Productivity Trends';
+      title = AppLocalizations.of(context)!.hourlyProductivityTrends;
       description = 'Focus intensity throughout today';
       trendLabel = 'PEAK INTENSITY';
-      trendValue = 'High +12%';
+      trendValue = '';
     } else if (_selectedPeriod == 'Month') {
-      title = 'Weekly Focus Comparison';
+      title = AppLocalizations.of(context)!.weeklyFocusComparison;
       description = 'Focus intensity trends across the month';
       trendLabel = 'MONTH TREND';
-      trendValue = 'Growth +8%';
+      trendValue = '';
     } else if (_selectedPeriod == 'Year') {
-      title = 'Yearly Productivity Trends';
+      title = AppLocalizations.of(context)!.yearlyProductivityTrends;
       description = 'Monthly focus distribution across the year';
       trendLabel = 'ANNUAL TREND';
-      trendValue = 'Increase +15.5%';
+      trendValue = '';
+    } else {
+      title = AppLocalizations.of(context)!.dailyProductivityTrends;
     }
 
     return Container(

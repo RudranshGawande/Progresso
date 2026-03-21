@@ -3,7 +3,7 @@ import 'package:progresso/main.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {
-    await tester.pumpWidget(const ProAnalyticsApp());
-    expect(find.text('ProAnalytics'), findsOneWidget);
+    await tester.pumpWidget(const ProgressoApp(isLoggedIn: false));
+    expect(find.text('PROGRESSO'), findsOneWidget);
   });
 }
