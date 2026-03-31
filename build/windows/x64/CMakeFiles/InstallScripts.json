@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Coding/App Development/Progresso/build/windows/x64/cmake_install.cmake",
+		"D:/Coding/App Development/Progresso/build/windows/x64/flutter/cmake_install.cmake",
+		"D:/Coding/App Development/Progresso/build/windows/x64/runner/cmake_install.cmake",
+		"D:/Coding/App Development/Progresso/build/windows/x64/plugins/desktop_drop/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

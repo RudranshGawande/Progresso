@@ -1,0 +1,10 @@
+^D:\CODING\APP DEVELOPMENT\PROGRESSO\BUILD\WINDOWS\X64\CMAKEFILES\8917A004D6B5991F38C10152E6C5009A\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\18\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" "-SD:/Coding/App Development/Progresso/windows" "-BD:/Coding/App Development/Progresso/build/windows/x64" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "D:/Coding/App Development/Progresso/build/windows/x64/progresso.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

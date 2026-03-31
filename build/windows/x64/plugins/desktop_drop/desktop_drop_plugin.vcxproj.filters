@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="D:\Coding\App Development\Progresso\windows\flutter\ephemeral\.plugin_symlinks\desktop_drop\windows\desktop_drop_plugin.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="D:\Coding\App Development\Progresso\windows\flutter\ephemeral\.plugin_symlinks\desktop_drop\windows\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{915F5F10-3C4F-3545-9922-3EE0990CE200}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
