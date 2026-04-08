@@ -2,6 +2,7 @@ D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/icudtl.d
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/flutter_windows.dll
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/desktop_drop_plugin.dll
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/AssetManifest.bin
+D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/AssetManifest.bin.json
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/assets/images/avatar.png
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/assets/images/coding.png
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/assets/images/design.png
@@ -14,8 +15,8 @@ D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/fonts/MaterialIcons-Regular.otf
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/kernel_blob.bin
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/NativeAssetsManifest.json
+D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/NOTICES
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/NOTICES.Z
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/packages/cupertino_icons/assets/CupertinoIcons.ttf
-D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/packages/google_sign_in_all_platforms_desktop/assets/post_auth_page.html
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/shaders/ink_sparkle.frag
 D:/Coding/App Development/Progresso/build/windows/x64/runner/Debug/data/flutter_assets/shaders/stretch_effect.frag
